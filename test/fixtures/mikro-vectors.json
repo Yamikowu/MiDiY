@@ -1,0 +1,20 @@
+{
+  "sourceRevision": "30f9b6013f3559dc1774d3ddb82affabd376692a",
+  "convention": "reportId separate from payload; physical Pad 1 is bottom-left",
+  "padInputs": [
+    { "reportId": 2, "payload": [12, 24, 0], "controlId": "PAD_1", "event": "note-on", "raw": 2048, "velocity": 64 },
+    { "reportId": 2, "payload": [0, 31, 255], "controlId": "PAD_13", "event": "note-on", "raw": 4095, "velocity": 127 },
+    { "reportId": 2, "payload": [15, 48, 0], "controlId": "PAD_4", "event": "note-off", "raw": 0, "velocity": 0 }
+  ],
+  "led": { "reportId": 128, "payloadLength": 80, "physicalPad1RedNormal": { "offset": 51, "value": 6 } },
+  "screenReferenceOnly": {
+    "reportId": 224, "payloadLength": 264,
+    "firstHeader": [0, 0, 0, 0, 128, 0, 2, 0],
+    "secondHeader": [0, 0, 2, 0, 128, 0, 2, 0],
+    "blankByte": 255,
+    "pixelExamples": [
+      { "row": 0, "column": 0, "framebufferOffset": 0, "litByteFromBlank": 254 },
+      { "row": 31, "column": 127, "framebufferOffset": 511, "litByteFromBlank": 127 }
+    ]
+  }
+}

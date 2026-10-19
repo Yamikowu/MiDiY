@@ -3,38 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101318">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23101318'/%3E%3Cpath d='M12 48V16h8l12 17 12-17h8v32h-9V29L32 44 21 29v19z' fill='%23f06444'/%3E%3C/svg%3E">
-  <title>Mikro Protocol Analyzer</title>
+  <meta name="theme-color" content="#151515">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23191919'/%3E%3Cpath d='M12 48V16h8l12 17 12-17h8v32h-9V29L32 44 21 29v19z' fill='%23e8e8e2'/%3E%3C/svg%3E">
+  <title>Mapping · MPA</title>
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./hardware-map.css">
+  <link rel="stylesheet" href="./translator.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">M<span>●</span></span><div><strong>MIKRO <em>PROTOCOL</em> ANALYZER</strong><small>MASCHINE MIKRO MK3 / HID RESEARCH LAB</small></div></div>
-      <div class="top-actions"><span id="device-status" class="status-pill">● 尚未連線</span><button id="connect" class="primary">連接裝置 <span>↗</span></button><button id="disconnect" class="ghost" disabled>中斷</button></div>
+      <a class="brand" href="#mapping" aria-label="MPA Mapping"><span class="brand-mark">mpa<span>↗</span></span><span class="brand-divider"></span><span class="brand-device">MASCHINE MIKRO<small>MK3 CONTROL WORKSPACE</small></span></a>
+      <div class="top-actions"><span id="device-status" class="status-pill">● 尚未連線</span><button id="connect" class="primary">連接裝置</button><button id="disconnect" class="ghost" disabled>中斷</button></div>
     </header>
-
+    <nav class="page-nav" role="tablist" aria-label="工作區">
+      <a id="tab-testing" href="#testing" role="tab" data-page="testing" aria-controls="page-testing" aria-selected="false" tabindex="-1"><span>01</span> Testing <small>監測與擷取</small></a>
+      <a id="tab-mapping" href="#mapping" role="tab" data-page="mapping" aria-controls="page-mapping" aria-selected="true"><span>02</span> Mapping <small>MIDI 與燈光</small></a>
+      <span class="nav-device">MIKRO MK3 <span class="muted">/</span> WEBHID + MIDI</span>
+    </nav>
     <main>
-      <section class="intro">
-        <div><p class="eyebrow">LOCAL-FIRST · WEBHID · VID 17CC / PID 1700</p><h1>讓每一次按下，<br><span>成為協定證據。</span></h1><p class="lead">依照控制器圖逐項操作，收集原始 Input Reports、比較變化位元組，建立可回溯的操作記錄。資料只留在目前瀏覽器分頁，直到你匯出。</p></div>
-        <div class="intro-card"><div class="intro-no">01 / GET STARTED</div><h2>開始一場分析</h2><ol><li>用支援 WebHID 的桌面瀏覽器，在 localhost 或 HTTPS 開啟本站。</li><li>連接 Mikro MK3，先讓控制器保持靜止。</li><li>選取圖上的控制項，開始擷取後按提示操作，再停止擷取。</li></ol><div class="privacy">◉ 只讀取 Input Reports；本站不會傳送 LED 或螢幕輸出。</div></div>
+      <section id="page-mapping" role="tabpanel" aria-labelledby="tab-mapping" tabindex="0">
+        <div class="page-heading"><div><p class="eyebrow">CONTROL MAPPING</p><h1>每個控制，都由你定義。</h1><p>點選參照圖上的按鍵，設定 MIDI 與 Pad 燈光，再儲存為你的設定檔。</p></div><span class="page-index">02 / MAPPING</span></div>
+        <div id="midi-panel" class="translator-panel" aria-label="MIDI 映射工作區"></div>
       </section>
-
-      <section class="metrics" aria-label="工作階段統計"><div><span>01</span><small>DEVICE</small><strong id="metric-device">等待連線</strong></div><div><span>02</span><small>REPORTS</small><strong id="metric-reports">0</strong></div><div><span>03</span><small>CAPTURES</small><strong id="metric-captures">0</strong></div><div><span>04</span><small>COVERAGE</small><strong id="metric-coverage">0 / 58</strong></div></section>
-
-      <div class="workspace">
-        <section class="panel device-panel"><div class="section-heading"><div><p class="eyebrow">01 / HARDWARE MAP</p><h2>控制器參照圖</h2></div><span class="section-note">點選控制項以選取</span></div><div class="hardware-scroll"><div id="hardware" class="hardware" aria-label="Mikro MK3 示意圖"></div></div><div class="map-footer"><span class="dot selected-dot"></span>目前選取 <span class="dot captured-dot"></span>已擷取 <span class="dot idle-dot"></span>待測</div><p class="caption">控制項命名與相對位置參照 Native Instruments Mikro MK3 手冊第 8–14 頁；此圖為本站繪製的操作示意。窄視窗可水平捲動。</p></section>
-
-        <section class="panel capture-panel"><div class="section-heading"><div><p class="eyebrow">02 / GUIDED CAPTURE</p><h2>逐項擷取</h2></div><span id="capture-indicator" class="live-tag">READY</span></div><div class="selected-control"><span>SELECTED CONTROL</span><h3 id="selected-name">Pad 1</h3><p id="selected-instruction">輕按一次、重按一次，每次都放開。</p></div><div class="capture-actions"><button id="start-capture" class="primary wide" disabled>● 開始擷取</button><button id="stop-capture" class="outline wide" disabled>■ 停止並分析</button></div><div class="field"><label for="capture-note">操作備註 <span>選填</span></label><textarea id="capture-note" rows="3" placeholder="例如：Shift 同時按下、Pad 重擊、Strip 從左滑到右…"></textarea></div><div id="capture-result" class="result empty">連接裝置並完成一筆擷取後，這裡會顯示候選報告 ID 與位元組偏移。</div><div class="capture-foot">擷取期間的所有 Input Reports 都會保留。候選欄位只表示「這段時間有變化」，需要重複操作才能確認因果。</div></section>
-      </div>
-
-      <div class="workspace lower">
-        <section class="panel log-panel"><div class="section-heading"><div><p class="eyebrow">03 / LIVE INPUT</p><h2>原始封包</h2></div><div class="inline-actions"><label class="switch"><input id="pause-log" type="checkbox"> 暫停顯示</label><button id="clear-log" class="text-button">清除顯示</button></div></div><div class="table-wrap"><table><thead><tr><th>TIME</th><th>REPORT ID</th><th>LEN</th><th>CHANGED BYTES</th><th>RAW HEX</th></tr></thead><tbody id="report-rows"><tr><td colspan="5" class="table-empty">等待 HID Input Report…</td></tr></tbody></table></div><p class="caption">表格最多顯示最近 100 筆；工作階段完整資料會包含全部已記錄報告。</p></section>
-        <section class="panel export-panel"><div class="section-heading"><div><p class="eyebrow">04 / RESEARCH DATA</p><h2>擷取記錄與匯出</h2></div></div><div id="capture-list" class="capture-list"><div class="list-empty">還沒有擷取記錄。</div></div><div class="export-actions"><button id="export-json" class="outline">↓ 匯出完整 JSON</button><button id="export-csv" class="outline">↓ 匯出候選 CSV</button><label class="outline file-button">↑ 匯入 JSON<input id="import-json" type="file" accept="application/json,.json" hidden></label></div><button id="reset-session" class="text-button danger">清空目前工作階段</button><p class="caption">JSON 包含原始報告、基線、每次擷取與候選欄位。CSV 僅包含分析摘要。</p></section>
-      </div>
-      <footer>MPA / LOCAL HID RESEARCH <span>參考：<a href="https://docs.native-instruments.com/ni-tech-manuals/maschine-mikro-mk3-manual/en/quick-reference" target="_blank" rel="noopener">NI Mikro MK3 手冊</a> · <a href="https://github.com/r00tman/maschine-mikro-mk3-driver" target="_blank" rel="noopener">開源驅動</a></span></footer>
+      <section id="page-testing" role="tabpanel" aria-labelledby="tab-testing" tabindex="0" hidden>
+        <div class="page-heading"><div><p class="eyebrow">DEVICE TESTING</p><h1>看見每一次操作。</h1><p>選取控制項、操作實體裝置，記錄與分析它的原始輸入。</p></div><span class="page-index">01 / TESTING</span></div>
+        <section class="metrics" aria-label="工作階段統計"><div><small>DEVICE</small><strong id="metric-device">等待連線</strong></div><div><small>REPORTS</small><strong id="metric-reports">0</strong></div><div><small>CAPTURES</small><strong id="metric-captures">0</strong></div><div><small>COVERAGE</small><strong id="metric-coverage">0 / 58</strong></div></section>
+        <div class="workspace">
+          <section class="panel device-panel"><div class="section-heading"><div><p class="eyebrow">HARDWARE</p><h2>控制器參照圖</h2></div><span class="section-note">選取 → 擷取 → 分析</span></div><div class="hardware-scroll"><div id="hardware" class="hardware" aria-label="Testing 控制器參照圖"></div></div><div class="map-footer"><span><i class="dot selected-dot"></i>目前選取</span><span><i class="dot captured-dot"></i>已擷取</span><span><i class="dot idle-dot"></i>待測</span></div></section>
+          <section class="panel capture-panel"><div class="section-heading"><div><p class="eyebrow">INSPECTOR</p><h2>逐項擷取</h2></div><span id="capture-indicator" class="live-tag">READY</span></div><div class="selected-control"><span>SELECTED CONTROL</span><h3 id="selected-name">Pad 1</h3><p id="selected-instruction">輕按一次、重按一次，每次都放開。</p></div><div class="capture-actions"><button id="start-capture" class="primary wide" disabled>開始擷取</button><button id="stop-capture" class="outline wide" disabled>停止並分析</button></div><div class="field"><label for="capture-note">操作備註 <span>選填</span></label><textarea id="capture-note" rows="2" placeholder="描述這次的操作…"></textarea></div><div id="capture-result" class="result empty">完成擷取後，顯示候選報告 ID 與位元組偏移。</div><p class="capture-foot">擷取期間保留完整 Input Reports。候選欄位表示此時有變化，請重複操作以確認。</p></section>
+        </div>
+        <section id="testing-decoded" class="panel decoded-panel" aria-label="即時解碼"></section>
+        <div class="workspace lower">
+          <section class="panel log-panel"><div class="section-heading"><div><p class="eyebrow">LIVE INPUT</p><h2>原始封包</h2></div><div class="inline-actions"><label class="switch"><input id="pause-log" type="checkbox">暫停顯示</label><button id="clear-log" class="text-button">清除顯示</button></div></div><div class="table-wrap"><table><thead><tr><th>TIME</th><th>REPORT ID</th><th>LEN</th><th>CHANGED BYTES</th><th>RAW HEX</th></tr></thead><tbody id="report-rows"><tr><td colspan="5" class="table-empty">等待 HID Input Report…</td></tr></tbody></table></div><p class="caption">顯示最近 100 筆；session 會保留全部已錄製的報告。</p></section>
+          <section class="panel export-panel"><div class="section-heading"><div><p class="eyebrow">SESSION</p><h2>擷取記錄</h2></div></div><div id="capture-list" class="capture-list"><div class="list-empty">還沒有擷取記錄。</div></div><div class="export-actions"><button id="export-json" class="outline">匯出 Session</button><button id="export-csv" class="outline">匯出 CSV</button><label class="outline file-button" tabindex="0" role="button">匯入 Session<input id="import-json" type="file" accept="application/json,.json" hidden></label></div><button id="reset-session" class="text-button danger">清空工作階段</button><p class="caption">Session 包含原始報告與擷取分析，與 Mapping 設定檔分開保存。</p></section>
+        </div>
+      </section>
+      <footer><span>MPA <span class="footer-divider">/</span> MASCHINE MIKRO MK3</span><span><a href="https://docs.native-instruments.com/ni-tech-manuals/maschine-mikro-mk3-manual/en/quick-reference" target="_blank" rel="noopener">硬體參照</a><a href="https://github.com/r00tman/maschine-mikro-mk3-driver" target="_blank" rel="noopener">協定來源</a></span></footer>
     </main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>

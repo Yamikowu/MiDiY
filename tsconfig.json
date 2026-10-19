@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], "strict": true,
+    "allowJs": true, "checkJs": false, "noEmit": true,
+    "types": ["w3c-web-hid", "webmidi"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.js"]
+}

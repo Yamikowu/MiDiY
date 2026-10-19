@@ -1,0 +1,178 @@
+{
+  "schema": "mpa-profile-v1",
+  "name": "Mikro MIDI",
+  "initialModeId": "default",
+  "modes": [
+    {
+      "id": "default",
+      "name": "Default",
+      "bindings": {
+        "PAD_1": {
+          "type": "note",
+          "channel": 1,
+          "note": 36,
+          "velocity": "pad"
+        },
+        "PAD_2": {
+          "type": "note",
+          "channel": 1,
+          "note": 37,
+          "velocity": "pad"
+        },
+        "PAD_3": {
+          "type": "note",
+          "channel": 1,
+          "note": 38,
+          "velocity": "pad"
+        },
+        "PAD_4": {
+          "type": "note",
+          "channel": 1,
+          "note": 39,
+          "velocity": "pad"
+        },
+        "PAD_5": {
+          "type": "note",
+          "channel": 1,
+          "note": 40,
+          "velocity": "pad"
+        },
+        "PAD_6": {
+          "type": "note",
+          "channel": 1,
+          "note": 41,
+          "velocity": "pad"
+        },
+        "PAD_7": {
+          "type": "note",
+          "channel": 1,
+          "note": 42,
+          "velocity": "pad"
+        },
+        "PAD_8": {
+          "type": "note",
+          "channel": 1,
+          "note": 43,
+          "velocity": "pad"
+        },
+        "PAD_9": {
+          "type": "note",
+          "channel": 1,
+          "note": 44,
+          "velocity": "pad"
+        },
+        "PAD_10": {
+          "type": "note",
+          "channel": 1,
+          "note": 45,
+          "velocity": "pad"
+        },
+        "PAD_11": {
+          "type": "note",
+          "channel": 1,
+          "note": 46,
+          "velocity": "pad"
+        },
+        "PAD_12": {
+          "type": "note",
+          "channel": 1,
+          "note": 47,
+          "velocity": "pad"
+        },
+        "PAD_13": {
+          "type": "note",
+          "channel": 1,
+          "note": 48,
+          "velocity": "pad"
+        },
+        "PAD_14": {
+          "type": "note",
+          "channel": 1,
+          "note": 49,
+          "velocity": "pad"
+        },
+        "PAD_15": {
+          "type": "note",
+          "channel": 1,
+          "note": 50,
+          "velocity": "pad"
+        },
+        "PAD_16": {
+          "type": "note",
+          "channel": 1,
+          "note": 51,
+          "velocity": "pad"
+        },
+        "SHIFT": {
+          "type": "none"
+        }
+      },
+      "pads": [
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        },
+        {
+          "color": 11,
+          "brightness": "dim"
+        }
+      ]
+    }
+  ]
+}

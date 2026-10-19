@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { changedBytes, summarizeCapture, normalizeImport } from '../src/analysis.js';
-import { controls } from '../src/controls.js';
+import { controls, getControl } from '../src/controls.js';
 
 test('Mikro MK3 control list has unique physical targets', () => {
   assert.equal(controls.length, 58);
   assert.equal(new Set(controls.map(control => control.id)).size, controls.length);
+  assert.equal(getControl('PAD_MODE').label, 'PAD MODE');
+  assert.equal(getControl('PAD_1').label, 'Pad 1');
 });
 
 test('changed bytes use zero-based offsets and preserve missing bytes', () => {

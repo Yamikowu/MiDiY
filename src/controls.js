@@ -11,8 +11,8 @@ export const groups = [
 export const controls = groups.flatMap(group => group.controls.map(id => ({
   id,
   group: group.id,
-  label: id === 'ENCODER_PUSH' ? 'Encoder 按下' : id === 'ENCODER_ROTATE' ? 'Encoder 旋轉' : id === 'SMART_STRIP' ? 'Smart Strip' : id.startsWith('PAD_') ? `Pad ${id.slice(4)}` : id.replaceAll('_', ' '),
-  instruction: id === 'ENCODER_ROTATE' ? '順時針轉動 3 格、逆時針轉動 3 格。' : id === 'SMART_STRIP' ? '觸碰、滑動，再離開 Smart Strip。' : id.startsWith('PAD_') ? '輕按一次、重按一次，每次都放開。' : '按下並放開 2 次。'
+  label: id === 'ENCODER_PUSH' ? 'Encoder 按下' : id === 'ENCODER_ROTATE' ? 'Encoder 旋轉' : id === 'SMART_STRIP' ? 'Smart Strip' : /^PAD_\d+$/.test(id) ? `Pad ${id.slice(4)}` : id.replaceAll('_', ' '),
+  instruction: id === 'ENCODER_ROTATE' ? '順時針轉動 3 格、逆時針轉動 3 格。' : id === 'SMART_STRIP' ? '觸碰、滑動，再離開 Smart Strip。' : /^PAD_\d+$/.test(id) ? '輕按一次、重按一次，每次都放開。' : '按下並放開 2 次。'
 })));
 
 export const getControl = id => controls.find(control => control.id === id);

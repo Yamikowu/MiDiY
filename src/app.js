@@ -1,9 +1,10 @@
-import { controls, groups, getControl } from './controls.js';
+import { controls, getControl } from './controls.js';
 import { changedBytes, hex, reportHex, summarizeCapture, normalizeImport } from './analysis.js';
+import { TranslatorUI } from './translator';
+import { renderHardware } from './hardware-view.js';
+import { mountPages } from './pages';
 
 const $ = id => document.getElementById(id);
-const VID = 0x17cc;
-const PID = 0x1700;
 const MAX_REPORTS = 100000;
 let device = null;
 let selected = 'PAD_1';
@@ -11,6 +12,8 @@ let activeCapture = null;
 let lastByReport = new Map();
 let displayRows = [];
 let session = freshSession();
+let translator = null;
+let recordingFull = false;
 
 function freshSession() {
   return { schema: 'mpa-session-v1', appVersion: '1.0.0', createdAt: new Date().toISOString(), device: null, reports: [], captures: [] };
@@ -27,35 +30,6 @@ function toast(message) {
   toast.timer = setTimeout(() => $('toast').classList.remove('visible'), 4000);
 }
 
-function controlButton(id, extra = '', displayLabel = '') {
-  const control = getControl(id);
-  return `<button type="button" class="hw-button ${extra}" data-control="${id}" aria-label="選取 ${escapeHtml(control.label)}" title="${escapeHtml(control.label)}">${escapeHtml(displayLabel || control.label)}</button>`;
-}
-
-function renderHardware() {
-  $('hardware').innerHTML = `
-    <div class="device-face">
-      <div class="device-left">
-        <div class="device-upper">
-          <div class="browser-zone">${controlButton('PROJECT', 'icon-key', '⦿')}${controlButton('FAVORITES', 'icon-key', '★')}${controlButton('BROWSER', 'icon-key', '☰')}</div>
-          <div class="edit-zone">
-            <div class="display-encoder"><div class="screen" aria-label="螢幕示意"></div><div class="encoder-cluster">${controlButton('ENCODER_ROTATE', 'encoder', '↻')}${controlButton('ENCODER_PUSH', 'push', '●')}</div></div>
-            <div class="quick-edit">${['VOLUME','SWING','TEMPO'].map(id => controlButton(id)).join('')}</div>
-            <div class="edit-tools">${controlButton('PLUG_IN')}${controlButton('SAMPLING')}<div class="arrows">${controlButton('ARROW_LEFT', '', '◀')}${controlButton('ARROW_RIGHT', '', '▶')}</div></div>
-          </div>
-        </div>
-        <div class="device-logo">◉ MASCHINE <span>MIKRO MK3</span></div>
-        <div class="performance-zone"><div class="strip-modes">${['PITCH','MOD','PERFORM','NOTES'].map(id => controlButton(id)).join('')}</div><div class="strip-lights" aria-hidden="true">● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ●</div>${controlButton('SMART_STRIP', 'strip', '')}<div class="performance-actions">${['GROUP','AUTO','LOCK','NOTE_REPEAT'].map(id => controlButton(id)).join('')}</div></div>
-        <div class="transport-zone"><div class="transport-grid">${['RESTART','ERASE','TAP','FOLLOW','PLAY','REC','STOP','SHIFT'].map(id => controlButton(id)).join('')}</div></div>
-      </div>
-      <div class="device-right"><div class="padmode-grid">${['FIXED_VEL','PAD_MODE','KEYBOARD','CHORDS','STEP'].map(id => controlButton(id)).join('')}</div><div class="pad-area"><div class="mode-grid">${['SCENE','PATTERN','EVENTS','VARIATION','DUPLICATE','SELECT','SOLO','MUTE'].map(id => controlButton(id)).join('')}</div><div class="pads">${[13,14,15,16,9,10,11,12,5,6,7,8,1,2,3,4].map(n => controlButton(`PAD_${n}`, 'pad')).join('')}</div></div></div>
-    </div>`;
-  $('hardware').addEventListener('click', event => {
-    const button = event.target.closest('[data-control]');
-    if (button) selectControl(button.dataset.control);
-  });
-  selectControl(selected);
-}
 
 function selectControl(id) {
   if (!getControl(id) || activeCapture) return;
@@ -63,7 +37,10 @@ function selectControl(id) {
   const control = getControl(id);
   $('selected-name').textContent = control.label;
   $('selected-instruction').textContent = control.instruction;
-  document.querySelectorAll('[data-control]').forEach(button => button.classList.toggle('selected', button.dataset.control === id));
+  $('hardware').querySelectorAll('[data-control]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.control === id);
+    button.setAttribute('aria-pressed', String(button.dataset.control === id));
+  });
   renderCaptureResult(session.captures.findLast(capture => capture.controlId === id));
 }
 
@@ -81,32 +58,27 @@ function updateUI() {
   $('metric-reports').textContent = session.reports.length.toLocaleString();
   $('metric-captures').textContent = String(session.captures.length);
   $('metric-coverage').textContent = `${new Set(session.captures.filter(capture => capture.samples.length).map(capture => capture.controlId)).size} / ${controls.length}`;
-  document.querySelectorAll('[data-control]').forEach(button => button.classList.toggle('captured', session.captures.some(capture => capture.controlId === button.dataset.control && capture.samples.length)));
+  $('hardware').querySelectorAll('[data-control]').forEach(button => button.classList.toggle('captured', session.captures.some(capture => capture.controlId === button.dataset.control && capture.samples.length)));
   renderCaptureList();
 }
 
 async function connect() {
   if (!('hid' in navigator)) return toast('此瀏覽器不支援 WebHID；請使用支援 WebHID 的桌面瀏覽器。');
   try {
-    const devices = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
-    if (!devices.length) return;
-    const chosen = devices[0];
-    if (!chosen.opened) await chosen.open();
+    const chosen = await translator.connect();
+    if (!chosen) return;
     device = chosen;
-    chosen.addEventListener('inputreport', onInput);
     session.device = { vendorId: chosen.vendorId, productId: chosen.productId, productName: chosen.productName || '', connectedAt: new Date().toISOString() };
     updateUI();
-    toast('已連接裝置。請先讓控制器靜止，再開始逐項擷取。');
+    toast('已連接裝置。MIDI 轉譯與原始報告分析可同時使用。');
   } catch (error) { toast(`連接失敗：${error.message}`); }
 }
 
 async function disconnect() {
   if (!device) return;
   if (activeCapture) stopCapture();
-  const current = device;
   device = null;
-  current.removeEventListener('inputreport', onInput);
-  try { if (current.opened) await current.close(); } catch (error) { toast(`關閉裝置失敗：${error.message}`); }
+  try { await translator.disconnect(); } catch (error) { toast(`關閉裝置失敗：${error.message}`); }
   lastByReport.clear();
   updateUI();
 }
@@ -119,9 +91,12 @@ function onInput(event) {
   lastByReport.set(reportId, bytes);
   const record = { time: new Date().toISOString(), t: Math.round(performance.now() * 1000) / 1000, reportId, bytes, changedOffsets: changes.map(change => change.offset) };
   if (session.reports.length >= MAX_REPORTS) {
-    if (device) void disconnect();
-    toast('已達 100,000 筆上限，請匯出資料後清空工作階段。');
-    updateUI();
+    if (!recordingFull) {
+      if (activeCapture) stopCapture();
+      recordingFull = true;
+      toast('錄製已達 100,000 筆上限；MIDI 轉譯繼續運作。請匯出後清空工作階段。');
+      updateUI();
+    }
     return;
   }
   session.reports.push(record);
@@ -199,6 +174,7 @@ async function importJson(file) {
     if (!window.confirm('匯入會取代目前工作階段。請先匯出需要保留的資料。確定繼續？')) return;
     if (device) await disconnect();
     session = parsed;
+    recordingFull = session.reports.length >= MAX_REPORTS;
     displayRows = session.reports.slice(-100).reverse();
     lastByReport = new Map();
     for (const record of session.reports) lastByReport.set(record.reportId, record.bytes);
@@ -210,6 +186,12 @@ async function importJson(file) {
 }
 
 $('connect').addEventListener('click', connect);
+document.addEventListener('keydown', event => {
+  const button = event.target.closest('.file-button');
+  if (button && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault(); button.querySelector('input[type="file"]')?.click();
+  }
+});
 $('disconnect').addEventListener('click', disconnect);
 $('start-capture').addEventListener('click', startCapture);
 $('stop-capture').addEventListener('click', stopCapture);
@@ -218,9 +200,13 @@ $('pause-log').addEventListener('change', () => { if (!$('pause-log').checked) r
 $('export-json').addEventListener('click', exportJson);
 $('export-csv').addEventListener('click', exportCsv);
 $('import-json').addEventListener('change', event => { const file = event.target.files[0]; if (file) importJson(file); event.target.value = ''; });
-$('reset-session').addEventListener('click', () => { if (!window.confirm('確定清空目前工作階段？尚未匯出的原始報告與擷取記錄都會移除。')) return; if (activeCapture) activeCapture = null; session = freshSession(); displayRows = []; lastByReport.clear(); renderReportRows(); renderCaptureResult(); updateUI(); toast('工作階段已清空。'); });
+$('reset-session').addEventListener('click', () => { if (!window.confirm('確定清空目前工作階段？尚未匯出的原始報告與擷取記錄都會移除。')) return; if (activeCapture) activeCapture = null; session = freshSession(); recordingFull = false; displayRows = []; lastByReport.clear(); renderReportRows(); renderCaptureResult(); updateUI(); toast('工作階段已清空。'); });
 $('capture-list').addEventListener('click', event => { const button = event.target.closest('[data-capture]'); if (!button || activeCapture) return; const capture = session.captures.find(item => item.id === button.dataset.capture); if (capture) { selectControl(capture.controlId); renderCaptureResult(capture); } });
-if ('hid' in navigator) navigator.hid.addEventListener('disconnect', event => { if (event.device === device) { device.removeEventListener('inputreport', onInput); if (activeCapture) stopCapture(); device = null; lastByReport.clear(); updateUI(); toast('裝置已拔除。'); } });
-renderHardware();
+renderHardware($('hardware'), selectControl);
+selectControl(selected);
+mountPages();
+translator = new TranslatorUI({ receive: onInput, toast, disconnected: () => {
+  if (activeCapture) stopCapture(); device = null; lastByReport.clear(); updateUI(); toast('裝置已拔除；已釋放 MIDI 音符。');
+} });
 renderReportRows();
 updateUI();
