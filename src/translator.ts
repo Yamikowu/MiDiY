@@ -6,7 +6,7 @@ import {
 import { WebHidAdapter, outputReports } from './adapters/web-hid';
 import { WebMidiAdapter } from './adapters/web-midi';
 import { renderHardware } from './hardware-view.js';
-import { controls, getControl } from './controls.js';
+import { getControl } from './controls.js';
 import { ProfileLibrary } from './profile-library';
 import { confirmAction } from './dialogs';
 
@@ -28,6 +28,8 @@ export class TranslatorUI {
   private library: ProfileLibrary;
   private profileDirty = false;
   private bindingDirty = false;
+  private editingProfile = false;
+  private editingMode = false;
   private engine: MappingEngine;
   private selected: ControlId = 'PAD_1';
   private activePads = new Set<string>();
@@ -65,29 +67,25 @@ export class TranslatorUI {
   private el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(`midi-${id}`) as T; }
   private mount(): void {
     this.el('panel').innerHTML = `
-      <section class="profile-bar" aria-label="設定檔">
-        <label class="profile-picker">設定檔<select id="midi-library" aria-label="已儲存的設定檔"></select></label>
-        <label class="profile-name">名稱<input id="midi-profile-name" maxlength="80" aria-label="設定檔名稱"></label>
-        <div class="profile-save-actions"><button id="midi-save" class="primary">儲存設定檔</button><button id="midi-save-as" class="outline">另存新檔</button></div>
-        <div class="profile-file-actions"><button id="midi-export" class="text-button">匯出</button><label class="text-button file-button" tabindex="0" role="button">匯入<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
-        <p id="midi-save-status" class="save-status" role="status"></p>
+      <section class="config-panel" aria-label="設定檔與模式">
+        <div class="config-row">
+          <label class="config-picker">設定檔<select id="midi-library" aria-label="選擇設定檔"></select><input id="midi-profile-name" maxlength="80" aria-label="編輯設定檔名稱" hidden></label>
+          <div class="config-actions"><button id="midi-profile-edit" class="outline">編輯</button><button id="midi-profile-duplicate" class="outline">複製</button><button id="midi-save" class="primary" hidden>儲存</button><button id="midi-profile-delete" class="text-button danger" hidden>刪除</button></div>
+          <div class="profile-file-actions"><button id="midi-export" class="text-button">匯出</button><label class="text-button file-button" tabindex="0" role="button">匯入<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
+          <p id="midi-save-status" class="save-status" role="status"></p>
+        </div>
+        <div class="config-row">
+          <label class="config-picker">模式<select id="midi-mode" aria-label="選擇模式"></select><input id="midi-mode-name" maxlength="80" aria-label="編輯模式名稱" hidden></label>
+          <div class="config-actions"><button id="midi-mode-edit" class="outline">編輯</button><button id="midi-add-mode" class="outline">複製</button><button id="midi-mode-save" class="primary" hidden>儲存</button><button id="midi-delete-mode" class="text-button danger" hidden>刪除</button></div>
+          <label class="switch default-switch"><input id="midi-initial" type="checkbox">設為啟動模式</label>
+        </div>
       </section>
-      <div class="routing-bar">
-        <label class="mode-picker">目前模式<select id="midi-mode"></select></label>
-        <span class="routing-divider"></span><button id="midi-enable" class="outline">授權 MIDI</button>
-        <label class="output-picker">MIDI 輸出<select id="midi-output" disabled><option value="">尚未授權</option></select></label>
-        <button id="midi-panic" class="text-button" title="釋放目前所有音符與按住的 CC">Panic</button>
-      </div>
       <div class="workspace mapping-workspace">
         <section class="panel mapping-device">
           <div class="section-heading"><div><p class="eyebrow">HARDWARE</p><h2>控制器參照圖</h2></div><span id="midi-mapped-count" class="section-note"></span></div>
           <div class="hardware-scroll"><div id="midi-hardware" class="hardware" aria-label="Mapping 控制器參照圖"></div></div>
           <div class="map-footer"><span><i class="dot selected-dot"></i>目前選取</span><span><i class="dot mapped-dot"></i>已映射</span><span><i class="dot idle-dot"></i>未映射</span></div>
-          <p class="map-hint">點選按鍵編輯。Pad 下方顯示 Note／Channel；色條預覽待機燈色。</p>
-          <details class="device-options"><summary>模式管理 <span>複製、命名與啟動模式</span></summary>
-            <div class="mode-editor"><label>模式名稱<input id="midi-mode-name" maxlength="80"></label><button id="midi-rename" class="outline">套用名稱</button></div>
-            <div class="inline-actions"><button id="midi-add-mode" class="outline">複製為新模式</button><button id="midi-delete-mode" class="text-button danger">刪除模式</button><label class="switch"><input id="midi-initial" type="checkbox">設為啟動模式</label></div>
-          </details>
+          <p class="map-hint">點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；Pad 顏色預覽待機燈色，Off 顯示米白色。</p>
           <details class="device-options"><summary>裝置燈光 <span id="midi-led-summary">尚未接管</span></summary>
             <label class="switch"><input id="midi-led-enable" type="checkbox" disabled>接管 LED 輸出</label>
             <p class="caption">啟用後套用本模式 Pad 燈光，按鍵與 Strip 燈會關閉。連線時不會自動改燈，無法還原其他軟體的燈光。</p>
@@ -98,7 +96,6 @@ export class TranslatorUI {
         <aside class="panel mapping-editor" aria-label="控制項編輯">
           <div class="editor-heading"><p class="eyebrow">CONTROL INSPECTOR</p><span id="midi-draft-state" class="draft-state" role="status">已套用</span></div>
           <h2 id="midi-selected">Pad 1</h2><p id="midi-binding-summary" class="binding-summary"></p>
-          <label class="control-picker">控制項<select id="midi-control"></select></label>
           <form id="midi-binding-form">
             <div class="editor-section-label">MIDI OUTPUT</div><label>輸出動作<select id="midi-action"></select></label>
             <div id="midi-fields" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
@@ -108,13 +105,33 @@ export class TranslatorUI {
         </aside>
       </div>
       <div class="mapping-status"><span id="midi-status" role="status">未選擇 MIDI 輸出</span><span>設定檔保存在此瀏覽器 · 可匯出 JSON</span></div>`;
-    renderHardware(this.el('hardware'), (id: string) => this.selectControl(id as ControlId));
+    renderHardware(this.el('hardware'), (id: string) => this.selectControl(id as ControlId), { includeEncoderTouch: true });
     document.getElementById('testing-decoded')!.innerHTML = `<div class="section-heading"><div><p class="eyebrow">DECODED INPUT</p><h2>即時解碼</h2></div><span id="midi-count" class="section-note">0 MIDI 訊息</span></div><label class="switch"><input id="midi-pressure-events" type="checkbox">顯示 Pad 壓力事件</label><pre id="midi-events" aria-live="off">等待控制器輸入…</pre>`;
-    this.el<HTMLSelectElement>('control').innerHTML = [...controls, { id: 'ENCODER_TOUCH', label: 'Encoder 觸碰' }].map(c => `<option value="${c.id}">${html(c.label)}</option>`).join('');
     this.el('binding-form').addEventListener('input', () => this.markBindingDirty());
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
     this.el('profile-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
-    this.el('save-as').addEventListener('click', () => this.save(true));
+    this.el('mode-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
+    this.el('profile-edit').addEventListener('click', () => {
+      if (this.editingMode) return this.options.toast('請先儲存模式名稱。');
+      this.editingProfile = true; this.renderEditStates(); this.el<HTMLInputElement>('profile-name').focus();
+    });
+    this.el('profile-duplicate').addEventListener('click', () => this.guard(async () => {
+      if (this.editingMode) return this.options.toast('請先儲存模式名稱。');
+      if (!await this.discardBindingDraft()) return;
+      const copy = parseProfile(this.profile); copy.name = `${copy.name} copy`;
+      this.library.save(copy, true); this.loadProfile(copy, false);
+      this.editingProfile = true; this.renderEditStates(); this.el<HTMLInputElement>('profile-name').focus();
+      this.el<HTMLInputElement>('profile-name').select();
+    }));
+    this.el('profile-delete').addEventListener('click', () => this.guard(async () => {
+      if (this.library.entries.length <= 1) return this.options.toast('至少保留一份設定檔。');
+      if (!await confirmAction(`刪除整份設定檔「${this.profile.name}」及其所有模式？`, '刪除設定檔')) return;
+      this.loadProfile(this.library.deleteActive(), false);
+    }));
+    this.el('profile-name').addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); this.save(); }
+      if (event.key === 'Escape') { this.editingProfile = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
+    });
     this.el('library').addEventListener('change', () => this.guard(async () => {
       const id = this.el<HTMLSelectElement>('library').value;
       if ((this.profileDirty || this.bindingDirty) && !await confirmAction('目前設定尚未儲存。捨棄變更並載入選取的設定檔？', '捨棄並載入')) return this.renderLibrary();
@@ -130,25 +147,30 @@ export class TranslatorUI {
       this.dispatch(this.engine.switchMode(this.el<HTMLSelectElement>('mode').value).messages);
       this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
     });
-    this.el('control').addEventListener('change', () => this.selectControl(this.el<HTMLSelectElement>('control').value as ControlId));
+    this.el('mode-edit').addEventListener('click', () => {
+      if (this.editingProfile) return this.options.toast('請先儲存設定檔名稱。');
+      this.editingMode = true; this.renderEditStates(); this.el<HTMLInputElement>('mode-name').focus();
+    });
+    this.el('mode-save').addEventListener('click', () => this.saveModeEdit());
+    this.el('mode-name').addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); this.saveModeEdit(); }
+      if (event.key === 'Escape') { this.editingMode = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
+    });
     this.el('action').addEventListener('change', () => { this.renderFields(); this.markBindingDirty(); });
     this.el('binding-form').addEventListener('submit', event => { event.preventDefault(); this.guard(() => this.applyBinding()); });
     this.el('panic').addEventListener('click', () => {
       this.release(); this.options.toast('已釋放目前音符及按住的 CC。');
     });
-    this.el('rename').addEventListener('click', async () => {
-      const mode = this.el<HTMLInputElement>('mode-name').value.trim();
-      if (!mode) return this.options.toast('請填寫模式名稱。');
-      if (!await this.discardBindingDraft()) return;
-      this.currentMode().name = mode; this.commit(); this.renderBinding();
-    });
     this.el('add-mode').addEventListener('click', async () => {
+      if (this.editingProfile) return this.options.toast('請先儲存設定檔名稱。');
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length >= 64) return this.options.toast('最多 64 個模式。');
       const copy = JSON.parse(JSON.stringify(this.currentMode()));
       copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`;
       this.profile.modes.push(copy); this.commit(); this.dispatch(this.engine.switchMode(copy.id).messages);
       this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
+      this.editingMode = true; this.renderEditStates(); this.el<HTMLInputElement>('mode-name').focus();
+      this.el<HTMLInputElement>('mode-name').select();
     });
     this.el('delete-mode').addEventListener('click', async () => {
       if (!await this.discardBindingDraft()) return;
@@ -160,7 +182,7 @@ export class TranslatorUI {
         if (binding?.type === 'mode' && binding.modeId === removed) delete mode.bindings[id as ControlId];
       }
       if (this.profile.initialModeId === removed) this.profile.initialModeId = this.profile.modes[0].id;
-      this.commit(); this.renderBinding();
+      this.editingMode = false; this.commit(); this.renderBinding(); this.renderEditStates();
     });
     this.el('initial').addEventListener('change', () => {
       if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.engine.activeModeId; this.commit(); }
@@ -168,6 +190,7 @@ export class TranslatorUI {
     });
     this.el('save').addEventListener('click', () => this.save());
     this.el('export').addEventListener('click', () => {
+      if (this.editingMode) return this.options.toast('請先儲存模式名稱。');
       if (!this.applyPending()) return;
       const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(this.profile, null, 2)], { type: 'application/json' }));
       a.href = url; a.download = 'mpa-profile.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -177,9 +200,9 @@ export class TranslatorUI {
       if (!file) return;
       if (file.size > 1024 * 1024) throw new Error('MIDI 設定檔超過 1 MB');
       const next = parseProfile(JSON.parse(await file.text()));
-      if (!await confirmAction('匯入會取代目前 MIDI 設定；擷取工作階段不受影響。繼續？', '匯入設定檔')) return;
-      this.library.activeId = ''; this.loadProfile(next, true);
-      this.options.toast('已匯入設定檔。按儲存可加入此瀏覽器的設定檔清單。');
+      if (!await confirmAction('匯入會新增一份設定檔並切換到它；擷取工作階段不受影響。繼續？', '匯入設定檔')) return;
+      this.library.save(next, true); this.loadProfile(next, false);
+      this.options.toast('已匯入並儲存為新的設定檔。');
     }));
     this.el('led-enable').addEventListener('change', () => {
       this.ledEnabled = this.el<HTMLInputElement>('led-enable').checked;
@@ -199,15 +222,15 @@ export class TranslatorUI {
       this.ledEnabled = false; this.ledGeneration++; this.pendingLed = null;
       this.queueLights(PAD_IDS.map(() => ({ color: 0, brightness: 'off' }))); this.renderDevice();
     });
-    this.renderLibrary(); this.renderModes(); this.selectControl(this.selected); this.renderPorts(); this.renderDevice(); this.renderSaveState();
+    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.selectControl(this.selected); this.renderPorts(); this.renderDevice(); this.renderSaveState();
   }
   private async guard(action: () => void | Promise<void>): Promise<void> {
     try { await action(); } catch (error) { this.options.toast(error instanceof Error ? error.message : String(error)); }
   }
   private currentMode() { return this.profile.modes.find(m => m.id === this.engine.activeModeId)!; }
   async selectControl(id: ControlId): Promise<void> {
-    if (id !== this.selected && !await this.discardBindingDraft()) { this.el<HTMLSelectElement>('control').value = this.selected; return; }
-    this.selected = id; this.el<HTMLSelectElement>('control').value = id;
+    if (id !== this.selected && !await this.discardBindingDraft()) return;
+    this.selected = id;
     this.el('selected').textContent = controlName(id); this.renderBinding(); this.renderMap();
   }
   private async discardBindingDraft(): Promise<boolean> {
@@ -224,21 +247,35 @@ export class TranslatorUI {
     this.el<HTMLSelectElement>('library').innerHTML = (this.library.activeId ? '' : '<option value="">新匯入的設定檔</option>') + this.library.entries.map(e => `<option value="${html(e.id)}">${html(e.profile.name)}</option>`).join('');
     this.el<HTMLSelectElement>('library').value = this.library.activeId;
   }
+  private renderEditStates(): void {
+    for (const [id, hidden] of [
+      ['library', this.editingProfile], ['profile-name', !this.editingProfile],
+      ['profile-edit', this.editingProfile], ['profile-duplicate', this.editingProfile],
+      ['save', !this.editingProfile], ['profile-delete', !this.editingProfile],
+      ['mode', this.editingMode], ['mode-name', !this.editingMode],
+      ['mode-edit', this.editingMode], ['add-mode', this.editingMode],
+      ['mode-save', !this.editingMode], ['delete-mode', !this.editingMode]
+    ] as [string, boolean][]) this.el(id).hidden = hidden;
+    this.el<HTMLButtonElement>('profile-delete').disabled = this.library.entries.length <= 1;
+    this.el<HTMLButtonElement>('delete-mode').disabled = this.profile.modes.length <= 1;
+    if (this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
+    if (this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
+  }
   private renderSaveState(): void {
-    this.el('save-status').textContent = this.profileDirty || this.bindingDirty ? '● 尚未儲存' : this.library.persisted ? '已儲存於此瀏覽器' : '預設設定 · 尚未儲存';
+    this.el('save-status').textContent = this.profileDirty || this.bindingDirty ? '● 尚未儲存' : this.library.persisted ? '已儲存於此瀏覽器' : '內建預設 · 首次編輯後自動儲存';
     this.el('save-status').classList.toggle('unsaved', this.profileDirty || this.bindingDirty);
   }
   private loadProfile(profile: Profile, dirty: boolean): void {
     this.release(); this.profile = profile; this.engine = new MappingEngine(profile);
-    this.profileDirty = dirty; this.bindingDirty = false;
+    this.profileDirty = dirty; this.bindingDirty = false; this.editingProfile = false; this.editingMode = false;
     this.el<HTMLInputElement>('profile-name').value = this.profile.name;
-    this.renderLibrary(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
+    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
   }
   private renderModes(): void {
     this.el<HTMLSelectElement>('mode').innerHTML = this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('');
     this.el<HTMLSelectElement>('mode').value = this.engine.activeModeId;
-    if (!this.profileDirty) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
-    this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
+    if (!this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
+    if (!this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
     this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.engine.activeModeId;
   }
   private renderBinding(): void {
@@ -303,7 +340,7 @@ export class TranslatorUI {
     this.el('binding-help').textContent = this.selected === 'ENCODER_ROTATE'
       ? '輸入保留原始計數差。Rust 未定義回繞範圍；預設不回繞，可依實機觀察設定。首份報告只建立基線。'
       : this.selected === 'SMART_STRIP' ? '原值 0 依 Rust 行為不送 CC；有效範圍預設 1–200，請依實機端點調整，不將它判定成觸碰手勢。'
-      : '先套用這個控制項，再儲存整份設定檔。Note 使用 0–127 數字，避免不同 App 的音名差異。';
+      : '按「套用至設定檔」即保存此控制項。Note 使用 0–127 數字，避免不同 App 的音名差異。';
   }
   private applyBinding(): void {
     const val = (id: string) => (document.getElementById(`bind-${id}`) as HTMLInputElement).value;
@@ -323,12 +360,33 @@ export class TranslatorUI {
     const mode = next.modes.find(m => m.id === this.engine.activeModeId)!;
     mode.bindings[this.selected] = b;
     if (isPad(this.selected)) mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: val('brightness') as PadLight['brightness'] };
-    this.profile = parseProfile(next); this.bindingDirty = false; this.commit(); this.renderBinding(); this.options.toast('已套用至設定檔；儲存後即可保留。');
+    this.profile = parseProfile(next); this.bindingDirty = false;
+    const saved = this.commit(); this.renderBinding();
+    if (saved) this.options.toast('已套用並儲存至目前設定檔。');
   }
-  private commit(): void {
+  private saveModeEdit(): void {
+    const name = this.el<HTMLInputElement>('mode-name').value.trim();
+    if (!name) return this.options.toast('請填寫模式名稱。');
+    if (this.bindingDirty && !this.applyPending()) return;
+    this.currentMode().name = name; this.editingMode = false;
+    const saved = this.commit(); this.renderBinding();
+    if (!saved) this.editingMode = true;
+    this.renderEditStates();
+  }
+  private commit(): boolean {
     this.dispatch(this.engine.reconfigure(this.profile)); this.activePads.clear(); this.renderPressed();
-    this.profileDirty = true; this.renderSaveState();
-    this.renderModes(); this.renderMap(); this.queueModeLights();
+    let saved = false;
+    try {
+      this.library.save(this.profile);
+      saved = true;
+      this.profileDirty = this.editingProfile && this.el<HTMLInputElement>('profile-name').value.trim() !== this.profile.name
+        || this.editingMode && this.el<HTMLInputElement>('mode-name').value.trim() !== this.currentMode().name;
+    } catch (error) {
+      this.profileDirty = true;
+      this.options.toast(`儲存失敗：${String(error)}`);
+    }
+    this.renderLibrary(); this.renderModes(); this.renderMap(); this.queueModeLights(); this.renderSaveState();
+    return saved;
   }
   private applyPending(): boolean {
     if (this.bindingDirty) {
@@ -339,18 +397,18 @@ export class TranslatorUI {
     if (!name) { this.options.toast('請填寫設定檔名稱。'); this.el('profile-name').focus(); return false; }
     this.profile.name = name; return true;
   }
-  private save(asCopy = false): void {
+  private save(): void {
     if (!this.applyPending()) return;
     try {
-      this.library.save(this.profile, asCopy); this.profileDirty = false;
-      this.renderLibrary(); this.renderSaveState();
-      this.options.toast(asCopy ? '已另存為新的設定檔。' : '設定檔已儲存。');
+      this.library.save(this.profile); this.profileDirty = false; this.editingProfile = false;
+      this.renderLibrary(); this.renderEditStates(); this.renderSaveState();
+      this.options.toast('設定檔已儲存。');
     } catch (error) { this.options.toast(`儲存失敗：${String(error)}`); }
   }
   private bindingLabel(binding?: Binding): string {
     if (!binding || binding.type === 'none') return '未映射';
     if (binding.type === 'mode') return `模式 → ${this.profile.modes.find(m => m.id === binding.modeId)?.name ?? binding.modeId}`;
-    if (binding.type === 'note') return `Note ${binding.note} · CH ${binding.channel}`;
+    if (binding.type === 'note') return `CH ${binding.channel} · Note ${binding.note}`;
     if (binding.type === 'cc') return `CC ${binding.controller} · CH ${binding.channel}`;
     return `Program ${binding.program} · CH ${binding.channel}`;
   }
@@ -368,7 +426,7 @@ export class TranslatorUI {
         button.style.setProperty('--pad-color', PAD_PREVIEW[light.color]);
         button.classList.toggle('has-light', light.color !== 0 && light.brightness !== 'off');
         button.dataset.brightness = light.brightness;
-        button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `${binding.note} / CH ${binding.channel}` : this.bindingLabel(binding);
+        button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel} / ${binding.note}` : this.bindingLabel(binding);
       }
     });
     this.el('mapped-count').textContent = `${count} 個控制項已映射`;

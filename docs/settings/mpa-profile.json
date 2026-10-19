@@ -1,6 +1,6 @@
 {
   "schema": "mpa-profile-v1",
-  "name": "Mikro MIDI",
+  "name": "Studio",
   "initialModeId": "default",
   "modes": [
     {
@@ -102,14 +102,47 @@
           "channel": 1,
           "note": 51,
           "velocity": "pad"
-        },
-        "SHIFT": {
-          "type": "none"
         }
       },
       "pads": [
         {
-          "color": 11,
+          "color": 1,
+          "brightness": "dim"
+        },
+        {
+          "color": 2,
+          "brightness": "dim"
+        },
+        {
+          "color": 3,
+          "brightness": "dim"
+        },
+        {
+          "color": 4,
+          "brightness": "dim"
+        },
+        {
+          "color": 5,
+          "brightness": "dim"
+        },
+        {
+          "color": 6,
+          "brightness": "dim"
+        },
+        {
+          "color": 7,
+          "brightness": "dim"
+        },
+        {
+          "color": 8,
+          "brightness": "dim"
+        },
+        {
+          "color": 9,
+          "brightness": "dim"
+        },
+        {
+          "color": 10,
           "brightness": "dim"
         },
         {
@@ -117,59 +150,23 @@
           "brightness": "dim"
         },
         {
-          "color": 11,
+          "color": 12,
           "brightness": "dim"
         },
         {
-          "color": 11,
+          "color": 13,
           "brightness": "dim"
         },
         {
-          "color": 11,
+          "color": 14,
           "brightness": "dim"
         },
         {
-          "color": 11,
+          "color": 15,
           "brightness": "dim"
         },
         {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
-          "brightness": "dim"
-        },
-        {
-          "color": 11,
+          "color": 16,
           "brightness": "dim"
         }
       ]

@@ -36,6 +36,15 @@ test('invalid library falls back to valid legacy profile without deleting stored
   assert.equal(store.getItem('mpa-profile-library-v1'), '{broken');
 });
 
+test('deleting the selected profile loads another and keeps at least one profile', () => {
+  const store = storage(), library = new ProfileLibrary(store);
+  const copy = library.current; copy.name = 'Studio'; library.save(copy, true);
+  assert.equal(library.deleteActive().name, 'Mikro MIDI');
+  assert.equal(library.entries.length, 1);
+  assert.equal(new ProfileLibrary(store).current.name, 'Mikro MIDI');
+  assert.throws(() => library.deleteActive(), /至少保留/);
+});
+
 test('unavailable storage leaves factory mapping usable and failed save preserves the current library', () => {
   const library = new ProfileLibrary({ getItem: () => { throw Error('denied'); }, setItem: () => { throw Error('quota'); } });
   assert.equal(library.persisted, false);

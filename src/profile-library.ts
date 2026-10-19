@@ -41,6 +41,13 @@ export class ProfileLibrary {
     if (!this.entries.some(e => e.id === id)) throw new Error('找不到設定檔');
     this.persist(this.entries, id); return this.current;
   }
+  deleteActive(): Profile {
+    if (this.entries.length <= 1) throw new Error('至少保留一份設定檔');
+    const index = this.entries.findIndex(e => e.id === this.activeId);
+    const entries = this.entries.filter(e => e.id !== this.activeId);
+    this.persist(entries, entries[Math.min(index, entries.length - 1)].id);
+    return this.current;
+  }
   private persist(entries: SavedProfile[], activeId: string): void {
     // Write the authoritative library before the legacy compatibility mirror.
     this.storage.setItem(LIBRARY_KEY, JSON.stringify({ schema: LIBRARY_KEY, entries, activeId }));

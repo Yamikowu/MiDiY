@@ -6,6 +6,7 @@
 }
 
 .hardware {
+  container-type: inline-size;
   width: 100%;
   min-width: 680px;
   max-width: 920px;
@@ -18,6 +19,25 @@
 }
 
 .device-face {
+  --face-height: calc(100cqw / 1.82);
+  --zone-inset: 7px; /* 6px padding + 1px border */
+  --upper-inset: calc(var(--face-height) * .025);
+  --left-key-gap: 1.2cqw;
+  --left-key-width: calc((100cqw * .4 - 2 * var(--zone-inset) - 3 * var(--left-key-gap)) / 4);
+  --performance-height: calc(var(--face-height) * .405 - 2 * var(--zone-inset));
+  --short-key-height: calc(var(--face-height) * .05);
+  --action-key-height: calc(var(--face-height) * .09);
+  --pad-gap: 6px;
+  --header-gap: 8px;
+  --mode-gap: 4px;
+  --right-content-height: calc(var(--face-height) - 2 * var(--zone-inset));
+  --mode-area-height: calc(var(--right-content-height) - var(--short-key-height) - var(--header-gap));
+  /* Variation is the fourth of eight mode keys (seven 4px gaps). */
+  --variation-bottom: calc(var(--zone-inset) + var(--short-key-height) + var(--header-gap) + (var(--mode-area-height) - 7 * var(--mode-gap)) / 2 + 3 * var(--mode-gap));
+  /* Size the touch surface between the short Pitch key and tall Group key. */
+  --strip-height: calc(var(--face-height) * .075);
+  /* Keep its lower edge 2px below Variation and 2px clear of Duplicate. */
+  --strip-lights-height: calc(var(--variation-bottom) + 2px - (var(--face-height) * .355 + var(--zone-inset) + var(--short-key-height) + var(--strip-height) + var(--performance-height) * .04));
   display: grid;
   grid-template-columns: 40% 58%;
   gap: 2%;
@@ -26,7 +46,8 @@
 
 .device-left {
   display: grid;
-  grid-template-rows: 29% 7% 40% 24%;
+  /* Top controls / logo / performance / gap / transport, from the supplied reference. */
+  grid-template-rows: 25% 10.5% 40.5% 2.5% 21.5%;
   min-width: 0;
   min-height: 0;
 }
@@ -41,10 +62,11 @@
 .browser-zone {
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: repeat(3, 1fr);
+  grid-template-rows: repeat(3, var(--short-key-height));
+  align-content: space-between;
   gap: 4px;
   min-height: 0;
-  padding: 4px;
+  padding: var(--upper-inset) calc(var(--face-height) * .014);
   border: 1px solid #3d3d3d;
   border-radius: 3px;
   background: #1c1c1c;
@@ -52,10 +74,10 @@
 
 .edit-zone {
   display: grid;
-  grid-template-columns: 46% 24% 26%;
-  gap: 2%;
+  grid-template-columns: minmax(0, 1fr) repeat(2, var(--left-key-width));
+  gap: var(--left-key-gap);
   min-height: 0;
-  padding: 4px;
+  padding: var(--upper-inset) 6px;
   border: 1px solid #3d3d3d;
   border-radius: 3px;
   background: #1c1c1c;
@@ -72,7 +94,8 @@
 }
 
 .display-encoder .screen {
-  height: 28%;
+  flex-shrink: 0;
+  height: var(--short-key-height);
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -81,16 +104,30 @@
   box-shadow: inset 0 0 8px #0008;
 }
 
+.display-encoder {
+  width: 80%;
+  justify-self: start;
+  margin-left: 4%;
+}
+
+.quick-edit,
+.edit-tools {
+  justify-content: space-between;
+}
+
 .encoder-cluster {
   position: relative;
   display: block;
-  flex: 1;
+  flex: none;
   width: min(68%, 70px);
+  aspect-ratio: 1;
   min-height: 0;
-  margin-left: 8%;
+  align-self: center;
+  margin: auto 0;
 }
 
 .encoder-cluster .encoder,
+.encoder-cluster .touch,
 .encoder-cluster .push {
   position: absolute;
   border-radius: 50%;
@@ -101,33 +138,44 @@
 .encoder-cluster .encoder {
   inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
   min-height: 0;
   aspect-ratio: 1;
-  background: radial-gradient(circle, #343434 58%, #141414 61%, #404040 65%, #202020 70%);
+  background: radial-gradient(circle, #343434 0 53%, #141414 54% 57%, #404040 58% 61%, #171717 62% 65%, #3d3d3d 66% 69%, #202020 70%);
   font-size: 18px;
 }
 
 .encoder-cluster .push {
   width: 39%;
-  aspect-ratio: 1;
-  top: 30%;
-  left: 30%;
-  z-index: 1;
+  height: 39%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
   background: #303030;
   font-size: 10px;
 }
 
+.encoder-cluster .touch {
+  width: 72%;
+  height: 72%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  background: radial-gradient(circle, #303030 0 55%, #191919 57% 66%, #3d3d3d 70% 88%, #151515 91%);
+}
+
 .quick-edit .hw-button,
 .edit-tools > .hw-button {
-  flex: 1;
+  flex: 0 0 var(--short-key-height);
 }
 
 .arrows {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 4px;
-  flex: 1;
+  flex: 0 0 var(--short-key-height);
   min-height: 0;
 }
 
@@ -136,7 +184,7 @@
   align-items: center;
   justify-content: space-between;
   font-weight: 800;
-  font-size: 13px;
+  font-size: clamp(13px, 2.3cqw, 21px);
   letter-spacing: .01em;
   color: #e4e4dd;
   padding-left: 4px;
@@ -149,7 +197,7 @@
 
 .performance-zone {
   display: grid;
-  grid-template-rows: 20% 9% 40% 25%;
+  grid-template-rows: var(--short-key-height) var(--strip-lights-height) var(--strip-height) minmax(0, 1fr);
   gap: 2%;
   min-height: 0;
   padding: 6px;
@@ -158,23 +206,37 @@
   background: #1c1c1c;
 }
 
+.performance-actions {
+  height: var(--action-key-height);
+  align-self: end;
+  margin-bottom: calc(var(--face-height) * .02);
+}
+
 .strip-modes,
 .performance-actions,
 .transport-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 5px;
+  column-gap: var(--left-key-gap);
   min-height: 0;
 }
 
 .strip-lights {
+  display: grid;
+  grid-template-columns: repeat(25, minmax(0, 1fr));
+  align-items: end;
+  justify-items: center;
   overflow: hidden;
-  white-space: nowrap;
-  text-align: center;
-  color: #696964;
-  font-size: 5px;
-  letter-spacing: 3px;
-  line-height: 1;
+  padding: 0 3% 1px;
+}
+
+.strip-light {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #666660;
+  box-shadow: 0 0 2px #a9a99b33;
 }
 
 .performance-zone .strip {
@@ -190,23 +252,27 @@
 }
 
 .transport-zone {
+  grid-row: 5;
   min-height: 0;
-  margin-top: 6px;
-  padding: 6px;
+  padding: var(--upper-inset) 6px;
   border: 1px solid #3d3d3d;
   border-radius: 3px;
   background: #1c1c1c;
 }
 
 .transport-grid {
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-rows: var(--short-key-height) var(--action-key-height);
+  align-content: space-between;
+  row-gap: 0;
   height: 100%;
 }
 
 .device-right {
+  --mode-key-width: 15%;
+  --pad-column-gap: var(--pad-gap);
   display: grid;
-  grid-template-rows: 10% 88%;
-  gap: 2%;
+  grid-template-rows: var(--short-key-height) minmax(0, 1fr);
+  gap: var(--header-gap);
   min-width: 0;
   min-height: 0;
   padding: 6px;
@@ -217,15 +283,15 @@
 
 .padmode-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 5px;
+  grid-template-columns: var(--mode-key-width) repeat(4, minmax(0, 1fr));
+  gap: var(--pad-column-gap);
   min-height: 0;
 }
 
 .pad-area {
   display: grid;
-  grid-template-columns: 15% 83%;
-  gap: 2%;
+  grid-template-columns: var(--mode-key-width) minmax(0, 1fr);
+  gap: var(--pad-column-gap);
   min-height: 0;
 }
 
@@ -233,7 +299,7 @@
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: repeat(8, 1fr);
-  gap: 4px;
+  gap: var(--mode-gap);
   min-height: 0;
 }
 
@@ -241,7 +307,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(4, 1fr);
-  gap: 6px;
+  gap: var(--pad-column-gap);
   min-height: 0;
 }
 
@@ -264,7 +330,17 @@
 }
 
 .hardware .icon-key {
-  font-size: 16px;
+  font-size: clamp(10px, 1.5cqw, 14px);
+  padding: 1px 2px;
+}
+
+.hardware .strip-modes .hw-button,
+.hardware .performance-actions .hw-button,
+.hardware .quick-edit .hw-button,
+.hardware .edit-tools .hw-button,
+.hardware .transport-grid .hw-button,
+.hardware .padmode-grid .hw-button {
+  padding: 2px 3px;
 }
 
 .hardware .pad {
@@ -304,14 +380,15 @@
 .hw-button.selected { border-color: #edede6; outline: 1px solid #edede6; outline-offset: 2px; color: #fff; }
 .hw-button.captured { border-color: #8e9c76; }
 .hw-button.is-mapped:not(.pad)::after { content: ''; position: absolute; width: 3px; height: 3px; border-radius: 50%; right: 3px; bottom: 3px; background: #c3d4a6; }
-.hardware .pad { display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding: 9px; background: #383836; border: 1px solid #61615b; border-bottom: 3px solid #121212; border-radius: 4px; }
-.pad-label { font: 500 14px var(--mono); color: #c2c2b8; }
-.pad-assignment { font: 7px var(--mono); color: #c8c8bc; letter-spacing: -.04em; min-height: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hardware .pad.has-light { border-top: 3px solid var(--pad-color); background: color-mix(in srgb, var(--pad-color) 13%, #30302f); }
-.hardware .pad.has-light[data-brightness=dim] { border-top-color: color-mix(in srgb, var(--pad-color) 68%, #333); }
-.hardware .pad.has-light[data-brightness=bright] { background: color-mix(in srgb, var(--pad-color) 22%, #30302f); }
-.hardware .pad.selected { border-color: #eee; background: #4b4b45; }
-.hardware .pad:hover { background: #4a4a45; }
+.hardware .pad { display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding: 9px; background: linear-gradient(145deg, #d5d4c9e8, #b9b8afe0); border: 1px solid #a4a49c; border-bottom: 3px solid #74746e; border-radius: 4px; }
+.pad-label { font: 500 14px var(--mono); color: #44443f; }
+.pad-assignment { font: 7px var(--mono); color: #4c4c46; letter-spacing: -.04em; min-height: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hardware .pad.has-light { border-top: 3px solid var(--pad-color); background: color-mix(in srgb, var(--pad-color) 82%, #c9c8be); }
+.hardware .pad.has-light[data-brightness=dim] { background: color-mix(in srgb, var(--pad-color) 60%, #c9c8be); }
+.hardware .pad.has-light[data-brightness=bright] { background: var(--pad-color); }
+.hardware .pad.selected { border-color: #f3f1e8; }
+.hardware .pad.selected:not(.has-light), .hardware .pad:not(.has-light):hover { background: #deddd2; }
+.hardware .pad.has-light:hover { filter: brightness(1.08); }
 .hardware .hw-button:focus-visible { outline: 2px solid #d9e6b1; outline-offset: 2px; z-index: 2; }
 #hardware .pad-label { font-size: 12px; }
 #hardware .pad-assignment { display: none; }

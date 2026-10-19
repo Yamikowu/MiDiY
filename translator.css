@@ -1,24 +1,27 @@
-.profile-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; background: #202020; border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px 14px; }
+.config-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-bottom: 20px; background: #202020; border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px 14px; }
+.config-row { display: grid; grid-template-columns: minmax(140px, 1fr) auto auto; gap: 8px; align-items: end; align-content: start; min-width: 0; }
+.config-row + .config-row { border-left: 1px solid var(--line); padding-left: 20px; }
 .translator-panel label:not(.switch):not(.file-button) { display: grid; gap: 8px; font-size: 10px; color: var(--muted); }
 .translator-panel select, .translator-panel input:not([type=checkbox]):not([type=file]) { width: 100%; }
-.profile-picker { width: 220px; }
-.profile-name { flex: 1; min-width: 140px; max-width: 300px; }
-.profile-save-actions, .profile-file-actions { display: flex; gap: 8px; }
-.profile-file-actions { margin-left: auto; gap: 14px; }
-.save-status { width: 100%; margin: 0; color: var(--quiet); font-size: 9px; line-height: 1.6; }
+.config-picker { min-width: 0; }
+.config-actions, .profile-file-actions { display: flex; align-items: center; gap: 8px; }
+.profile-file-actions, .default-switch { justify-self: end; }
+.default-switch { white-space: nowrap; min-height: 38px; }
+.save-status { grid-column: 1 / -1; margin: 0; color: var(--quiet); font-size: 9px; line-height: 1.6; }
+.config-panel [hidden] { display: none !important; }
 .unsaved { color: var(--accent) !important; }
-.routing-bar { display: flex; align-items: end; gap: 14px; padding: 19px 2px 22px; }
-.mode-picker { width: 195px; }
-.routing-divider { height: 30px; width: 1px; background: var(--line); margin: 0 4px 4px; }
-.output-picker { flex: 1; max-width: 440px; }
-#midi-panic { margin-left: auto; }
+.page-heading-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none; min-width: 0; }
+.page-heading-actions .page-index { align-self: flex-end; }
+.midi-heading-controls { display: flex; align-items: end; gap: 10px; }
+.midi-heading-controls .output-picker { display: grid; gap: 8px; width: 235px; color: var(--muted); font-size: 10px; }
+.midi-heading-controls .output-picker select { width: 100%; }
+.midi-heading-controls #midi-panic { margin: 0; }
 .mapping-editor { position: sticky; top: 18px; }
 .editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .editor-heading .eyebrow { margin: 0; }
 .draft-state { font-size: 9px; color: var(--quiet); }
 .mapping-editor > h2 { margin-top: 19px; font-size: 29px; font-weight: 550; letter-spacing: -.04em; }
 .binding-summary { margin: 9px 0 22px; color: var(--muted); font: 11px var(--mono); }
-.control-picker { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
 .editor-section-label { width: 100%; grid-column: 1 / -1; color: var(--quiet); font: 8px var(--mono); letter-spacing: .12em; margin: 23px 0 14px; }
 .binding-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin-top: 16px; }
 .binding-fields:empty { display: none; }
@@ -32,35 +35,35 @@
 .device-options summary::-webkit-details-marker { display: none; }
 .device-options summary > span { margin-left: auto; font-size: 9px; color: var(--quiet); }
 .device-options .inline-actions { margin: 16px 0 18px; }
-.mode-editor { display: flex; align-items: end; gap: 10px; }
-.mode-editor > label { flex: 1; }
 .device-options .caption { max-width: 600px; margin-bottom: 16px; }
 .mapping-status { display: flex; justify-content: space-between; gap: 16px; margin: 18px 0 0; color: var(--quiet); font-size: 9px; }
 #midi-status { color: #b5bda6; }
 .decoded-panel { margin-top: 20px; }
 #midi-events { height: 170px; overflow: auto; margin: 18px 0 0; padding: 15px; border: 1px solid var(--line); border-radius: 3px; background: var(--field); color: #b6b9ad; font: 10px/1.8 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .hw-button.is-pressed { outline: 2px solid #dce6b7; outline-offset: 1px; filter: brightness(1.3); }
+@media (max-width: 1060px) {
+  .config-panel { grid-template-columns: 1fr; }
+  .config-row { grid-template-columns: minmax(180px, 1fr) auto auto; }
+  .config-row + .config-row { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 18px; }
+}
 @media (max-width: 1120px) {
   .mapping-editor { position: static; }
   .mapping-workspace .mapping-editor { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
   .editor-heading, .mapping-editor > h2, .binding-summary { grid-column: 1; }
-  .mapping-editor > .control-picker { grid-column: 1; border: 0; }
-  #midi-binding-form { grid-column: 2; grid-row: 1 / 6; }
+  #midi-binding-form { grid-column: 2; grid-row: 1 / 5; }
   #midi-binding-form > .editor-section-label { margin-top: 0; }
   #midi-binding-help { grid-column: 1; }
 }
 @media (max-width: 680px) {
-  .profile-bar { padding: 16px; gap: 14px 10px; }
-  .profile-picker { flex: 1; min-width: 130px; width: auto; }
-  .profile-name { min-width: 110px; max-width: none; }
-  .profile-file-actions { gap: 8px; }
-  .profile-save-actions { gap: 6px; }
-  .profile-save-actions button { padding-left: 12px; padding-right: 12px; }
-  .routing-bar { flex-wrap: wrap; gap: 14px 10px; }
-  .routing-divider { display: none; }
-  .mode-picker { flex: 1; width: auto; }
-  .output-picker { flex-basis: calc(100% - 80px); order: 3; }
-  #midi-panic { order: 4; }
+  .config-panel { padding: 16px; }
+  .config-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+  .config-actions { gap: 6px; }
+  .config-actions button { padding-left: 10px; padding-right: 10px; }
+  .profile-file-actions, .default-switch { grid-column: 1 / -1; justify-self: end; }
+  #page-mapping .page-heading { flex-wrap: wrap; }
+  .page-heading-actions { width: 100%; align-items: stretch; }
+  .midi-heading-controls { flex-wrap: wrap; }
+  .midi-heading-controls .output-picker { flex: 1; min-width: 170px; width: auto; }
   .mapping-workspace .mapping-editor { display: block; }
   #midi-binding-form > .editor-section-label { margin-top: 22px; }
   .device-options summary > span { font-size: 8px; }
