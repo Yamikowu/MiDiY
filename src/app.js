@@ -27,22 +27,29 @@ function toast(message) {
   toast.timer = setTimeout(() => $('toast').classList.remove('visible'), 4000);
 }
 
-function controlButton(id, extra = '') {
+function controlButton(id, extra = '', displayLabel = '') {
   const control = getControl(id);
-  return `<button type="button" class="hw-button ${extra}" data-control="${id}" aria-label="選取 ${escapeHtml(control.label)}">${escapeHtml(control.label)}</button>`;
+  return `<button type="button" class="hw-button ${extra}" data-control="${id}" aria-label="選取 ${escapeHtml(control.label)}" title="${escapeHtml(control.label)}">${escapeHtml(displayLabel || control.label)}</button>`;
 }
 
 function renderHardware() {
   $('hardware').innerHTML = `
-    <div class="device-topline"><span>MASCHINE</span><b>MIKRO <i>MK3</i></b></div>
-    <div class="device-upper">
-      <div class="hw-section browser-zone"><small>BROWSER</small>${groups[0].controls.map(id => controlButton(id)).join('')}</div>
-      <div class="hw-section edit-zone"><small>EDIT / DISPLAY</small><div class="screen">MIKRO MK3 <span>▮▮▮▮▮</span></div><div class="edit-grid">${['PLUG_IN','SAMPLING','VOLUME','SWING','TEMPO','ARROW_LEFT','ARROW_RIGHT'].map(id => controlButton(id)).join('')}<div class="encoder-cluster">${controlButton('ENCODER_ROTATE', 'encoder')}${controlButton('ENCODER_PUSH', 'push')}</div></div></div>
-    </div>
-    <div class="device-lower">
-      <div class="left-side"><div class="hw-section performance-zone"><small>PERFORMANCE</small><div class="mini-grid">${['PITCH','MOD','PERFORM','NOTES'].map(id => controlButton(id)).join('')}</div>${controlButton('SMART_STRIP', 'strip')}<div class="mini-grid">${['GROUP','AUTO','LOCK','NOTE_REPEAT'].map(id => controlButton(id)).join('')}</div></div><div class="hw-section transport-zone"><small>TRANSPORT</small><div class="mini-grid">${groups[3].controls.map(id => controlButton(id)).join('')}</div></div></div>
-      <div class="right-side"><div class="hw-section padmode-zone"><small>PAD INPUT MODE</small><div class="padmode-grid">${groups[5].controls.map(id => controlButton(id)).join('')}</div></div><div class="pad-area"><div class="mode-grid">${groups[4].controls.map(id => controlButton(id)).join('')}</div><div class="pads">${[13,14,15,16,9,10,11,12,5,6,7,8,1,2,3,4].map(n => controlButton(`PAD_${n}`, 'pad')).join('')}</div></div></div>
-    </div><div class="device-bottomline">NATIVE INSTRUMENTS <span>USB CONTROLLER / 17CC:1700</span></div>`;
+    <div class="device-face">
+      <div class="device-left">
+        <div class="device-upper">
+          <div class="browser-zone">${controlButton('PROJECT', 'icon-key', '⦿')}${controlButton('FAVORITES', 'icon-key', '★')}${controlButton('BROWSER', 'icon-key', '☰')}</div>
+          <div class="edit-zone">
+            <div class="display-encoder"><div class="screen" aria-label="螢幕示意"></div><div class="encoder-cluster">${controlButton('ENCODER_ROTATE', 'encoder', '↻')}${controlButton('ENCODER_PUSH', 'push', '●')}</div></div>
+            <div class="quick-edit">${['VOLUME','SWING','TEMPO'].map(id => controlButton(id)).join('')}</div>
+            <div class="edit-tools">${controlButton('PLUG_IN')}${controlButton('SAMPLING')}<div class="arrows">${controlButton('ARROW_LEFT', '', '◀')}${controlButton('ARROW_RIGHT', '', '▶')}</div></div>
+          </div>
+        </div>
+        <div class="device-logo">◉ MASCHINE <span>MIKRO MK3</span></div>
+        <div class="performance-zone"><div class="strip-modes">${['PITCH','MOD','PERFORM','NOTES'].map(id => controlButton(id)).join('')}</div><div class="strip-lights" aria-hidden="true">● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ● ●</div>${controlButton('SMART_STRIP', 'strip', '')}<div class="performance-actions">${['GROUP','AUTO','LOCK','NOTE_REPEAT'].map(id => controlButton(id)).join('')}</div></div>
+        <div class="transport-zone"><div class="transport-grid">${['RESTART','ERASE','TAP','FOLLOW','PLAY','REC','STOP','SHIFT'].map(id => controlButton(id)).join('')}</div></div>
+      </div>
+      <div class="device-right"><div class="padmode-grid">${['FIXED_VEL','PAD_MODE','KEYBOARD','CHORDS','STEP'].map(id => controlButton(id)).join('')}</div><div class="pad-area"><div class="mode-grid">${['SCENE','PATTERN','EVENTS','VARIATION','DUPLICATE','SELECT','SOLO','MUTE'].map(id => controlButton(id)).join('')}</div><div class="pads">${[13,14,15,16,9,10,11,12,5,6,7,8,1,2,3,4].map(n => controlButton(`PAD_${n}`, 'pad')).join('')}</div></div></div>
+    </div>`;
   $('hardware').addEventListener('click', event => {
     const button = event.target.closest('[data-control]');
     if (button) selectControl(button.dataset.control);
