@@ -85,7 +85,7 @@ export class TranslatorUI {
           <div class="section-heading"><div><p class="eyebrow">HARDWARE</p><h2>控制器參照圖</h2></div><span id="midi-mapped-count" class="section-note"></span></div>
           <div class="hardware-scroll"><div id="midi-hardware" class="hardware" aria-label="Mapping 控制器參照圖"></div></div>
           <div class="map-footer"><span><i class="dot selected-dot"></i>目前選取</span><span><i class="dot mapped-dot"></i>已映射</span><span><i class="dot idle-dot"></i>未映射</span></div>
-          <p class="map-hint">點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；Pad 顏色預覽待機燈色，Off 顯示米白色。</p>
+          <p class="map-hint">點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；選擇燈色即在圖上預覽，套用後才儲存。</p>
           <details class="device-options"><summary>裝置燈光 <span id="midi-led-summary">尚未接管</span></summary>
             <label class="switch"><input id="midi-led-enable" type="checkbox" disabled>接管 LED 輸出</label>
             <p class="caption">啟用後套用本模式 Pad 燈光，按鍵與 Strip 燈會關閉。連線時不會自動改燈，無法還原其他軟體的燈光。</p>
@@ -99,7 +99,7 @@ export class TranslatorUI {
           <form id="midi-binding-form">
             <div class="editor-section-label">MIDI OUTPUT</div><label>輸出動作<select id="midi-action"></select></label>
             <div id="midi-fields" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
-            <button id="midi-apply" class="primary wide" type="submit">套用至設定檔</button>
+            <button id="midi-apply" class="primary wide" type="submit">套用至目前模式</button>
           </form>
           <p id="midi-binding-help" class="caption"></p>
         </aside>
@@ -109,6 +109,8 @@ export class TranslatorUI {
     document.getElementById('testing-decoded')!.innerHTML = `<div class="section-heading"><div><p class="eyebrow">DECODED INPUT</p><h2>即時解碼</h2></div><span id="midi-count" class="section-note">0 MIDI 訊息</span></div><label class="switch"><input id="midi-pressure-events" type="checkbox">顯示 Pad 壓力事件</label><pre id="midi-events" aria-live="off">等待控制器輸入…</pre>`;
     this.el('binding-form').addEventListener('input', () => this.markBindingDirty());
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
+    this.el('pad-light').addEventListener('input', () => this.previewPadLight());
+    this.el('pad-light').addEventListener('change', () => this.previewPadLight());
     this.el('profile-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('mode-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('profile-edit').addEventListener('click', () => {
@@ -156,7 +158,10 @@ export class TranslatorUI {
       if (event.key === 'Enter') { event.preventDefault(); this.saveModeEdit(); }
       if (event.key === 'Escape') { this.editingMode = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
     });
-    this.el('action').addEventListener('change', () => { this.renderFields(); this.markBindingDirty(); });
+    this.el('action').addEventListener('change', () => {
+      const lightDraft = this.readPadLightDraft();
+      this.renderFields(undefined, lightDraft ?? undefined); this.markBindingDirty(); this.previewPadLight();
+    });
     this.el('binding-form').addEventListener('submit', event => { event.preventDefault(); this.guard(() => this.applyBinding()); });
     this.el('panic').addEventListener('click', () => {
       this.release(); this.options.toast('已釋放目前音符及按住的 CC。');
@@ -289,7 +294,7 @@ export class TranslatorUI {
     this.el<HTMLSelectElement>('action').value = b?.type ?? 'none';
     this.renderFields(b); this.renderSaveState();
   }
-  private renderFields(existing?: Binding): void {
+  private renderFields(existing?: Binding, lightDraft?: PadLight): void {
     const action = this.el<HTMLSelectElement>('action').value;
     const b = existing?.type === action ? existing : undefined;
     let fields = '';
@@ -331,7 +336,7 @@ export class TranslatorUI {
       if (b?.type === 'cc' && (b.style === 'momentary' || b.style === 'toggle')) (document.getElementById('bind-style') as HTMLSelectElement).value = b.style;
     }
     const index = isPad(this.selected) ? Number(this.selected.slice(4)) - 1 : -1;
-    const light = this.currentMode().pads[index];
+    const light = lightDraft ?? this.currentMode().pads[index];
     this.el('pad-light').innerHTML = light ? `<div class="editor-section-label">PAD LIGHT</div><label>Pad 色彩<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label>待機亮度<select id="bind-brightness">${[['off', '關閉'], ['dim', '低'], ['normal', '中'], ['bright', '高']].map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>` : '';
     if (light) {
       (document.getElementById('bind-color') as HTMLSelectElement).value = String(light.color);
@@ -340,7 +345,8 @@ export class TranslatorUI {
     this.el('binding-help').textContent = this.selected === 'ENCODER_ROTATE'
       ? '輸入保留原始計數差。Rust 未定義回繞範圍；預設不回繞，可依實機觀察設定。首份報告只建立基線。'
       : this.selected === 'SMART_STRIP' ? '原值 0 依 Rust 行為不送 CC；有效範圍預設 1–200，請依實機端點調整，不將它判定成觸碰手勢。'
-      : '按「套用至設定檔」即保存此控制項。Note 使用 0–127 數字，避免不同 App 的音名差異。';
+      : isPad(this.selected) ? '燈色與亮度會立即在圖上預覽；按「套用至目前模式」後才儲存。若已接管燈光，也會更新裝置。'
+      : '按「套用至目前模式」會更新這個模式的控制項，並自動儲存整份設定檔。Note 使用 0–127 數字。';
   }
   private applyBinding(): void {
     const val = (id: string) => (document.getElementById(`bind-${id}`) as HTMLInputElement).value;
@@ -362,7 +368,7 @@ export class TranslatorUI {
     if (isPad(this.selected)) mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: val('brightness') as PadLight['brightness'] };
     this.profile = parseProfile(next); this.bindingDirty = false;
     const saved = this.commit(); this.renderBinding();
-    if (saved) this.options.toast('已套用並儲存至目前設定檔。');
+    if (saved) this.options.toast('已套用至目前模式，設定檔已儲存。');
   }
   private saveModeEdit(): void {
     const name = this.el<HTMLInputElement>('mode-name').value.trim();
@@ -412,6 +418,33 @@ export class TranslatorUI {
     if (binding.type === 'cc') return `CC ${binding.controller} · CH ${binding.channel}`;
     return `Program ${binding.program} · CH ${binding.channel}`;
   }
+  private readPadLightDraft(): PadLight | null {
+    if (!isPad(this.selected)) return null;
+    const colorInput = document.getElementById('bind-color') as HTMLSelectElement | null;
+    const brightnessInput = document.getElementById('bind-brightness') as HTMLSelectElement | null;
+    if (!colorInput || !brightnessInput) return null;
+    const color = Number(colorInput.value);
+    const brightness = brightnessInput.value as PadLight['brightness'];
+    if (!Number.isInteger(color) || color < 0 || color >= PAD_COLORS.length || !['off', 'dim', 'normal', 'bright'].includes(brightness)) return null;
+    return { color, brightness };
+  }
+  private paintPad(button: HTMLButtonElement, light: PadLight, preview = false): void {
+    button.style.setProperty('--pad-color', PAD_PREVIEW[light.color]);
+    button.classList.toggle('has-light', light.color !== 0 && light.brightness !== 'off');
+    button.classList.toggle('preview-light', preview);
+    button.dataset.brightness = light.brightness;
+  }
+  private previewPadLight(): void {
+    const draft = this.readPadLightDraft();
+    if (!draft) return;
+    const saved = this.currentMode().pads[Number(this.selected.slice(4)) - 1];
+    const preview = draft.color !== saved.color || draft.brightness !== saved.brightness;
+    const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${this.selected}"]`);
+    if (!button) return;
+    this.paintPad(button, draft, preview);
+    button.title = `${controlName(this.selected)} · ${this.bindingLabel(this.currentMode().bindings[this.selected])}${preview ? ' · 燈色預覽，尚未套用' : ''}`;
+    button.setAttribute('aria-label', `選取 ${button.title}`);
+  }
   private renderMap(): void {
     const count = Object.values(this.currentMode().bindings).filter(b => b && b.type !== 'none').length;
     this.el('hardware').querySelectorAll<HTMLButtonElement>('[data-control]').forEach(button => {
@@ -423,9 +456,7 @@ export class TranslatorUI {
       button.setAttribute('aria-label', `選取 ${button.title}`);
       if (PAD_IDS.includes(id as `PAD_${number}`)) {
         const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-        button.style.setProperty('--pad-color', PAD_PREVIEW[light.color]);
-        button.classList.toggle('has-light', light.color !== 0 && light.brightness !== 'off');
-        button.dataset.brightness = light.brightness;
+        this.paintPad(button, light);
         button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel} / ${binding.note}` : this.bindingLabel(binding);
       }
     });
