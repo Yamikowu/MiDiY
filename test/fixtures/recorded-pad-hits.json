@@ -1,0 +1,10 @@
+{
+  "source": "docs/verification/mpa-session-2026-10-20T13-40-13-562Z.json",
+  "description": "One recorded Report 2 NoteOn triplet per physical Pad; payload excludes Report ID",
+  "hits": [
+    [12, 24, 211], [13, 24, 5], [14, 24, 123], [15, 21, 220],
+    [8, 22, 113], [9, 20, 245], [10, 23, 46], [11, 17, 152],
+    [4, 18, 223], [5, 17, 112], [6, 18, 154], [7, 17, 114],
+    [0, 17, 219], [1, 21, 162], [2, 20, 91], [3, 18, 104]
+  ]
+}

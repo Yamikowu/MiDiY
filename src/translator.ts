@@ -1,7 +1,7 @@
 import {
-  InputDecoder, MappingEngine, createDefaultProfile, parseProfile, PAD_IDS, PAD_COLORS,
-  encodePadLights, type Binding, type ControlId, type Profile, type InputEvent, type MidiMessage,
-  type PadLight, type OutputReport
+  PAD_VELOCITY_CURVES, type PadVelocityCurve, InputDecoder, MappingEngine, createDefaultProfile, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
+  encodePadLights, encodeLights, type Binding, type Brightness, type ButtonLightId, type ControlId, type Profile, type InputEvent, type MidiMessage,
+  type PadLight, type OutputReport, type PressureBinding, type StripLightMode
 } from '@mpa/mikro-core';
 import { WebHidAdapter, outputReports } from './adapters/web-hid';
 import { WebMidiAdapter } from './adapters/web-midi';
@@ -11,10 +11,31 @@ import { ProfileLibrary } from './profile-library';
 import { confirmAction } from './dialogs';
 
 const PAD_PREVIEW = ['#666666', '#ef6262', '#ef914b', '#efac70', '#eab760', '#e4cd5c', '#a9d866', '#60be82', '#6bd0ad', '#71cdd9', '#52b1c8', '#749ee9', '#9d87c9', '#a087e4', '#b377d4', '#cf77bc', '#e979ae', '#e7e7df'];
-const isPad = (id: ControlId) => PAD_IDS.includes(id as `PAD_${number}`);
+const isPad = (id: ControlId): id is `PAD_${number}` => PAD_IDS.includes(id as `PAD_${number}`);
+const isLitButton = (id: ControlId): id is ButtonLightId => BUTTON_IDS.slice(0, 39).includes(id as ButtonLightId);
+const brightnessOptions = (selected: Brightness) => ([['off', '關閉'], ['dim', '低'], ['normal', '中'], ['bright', '高']] as const)
+  .map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('');
 const controlName = (id: ControlId) => getControl(id)?.label ?? 'Encoder 觸碰';
 const html = (text: unknown) => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const field = (id: string, label: string, value: number, min = 0, max = 127) => `<label>${label}<input id="bind-${id}" type="number" min="${min}" max="${max}" value="${value}" required></label>`;
+const ccFields = (prefix: string, binding?: Binding, max = 127, includeActionOn = true) => {
+  const cc = binding?.type === 'cc' && !['strip', 'encoder'].includes(binding.style) ? binding : undefined;
+  const other = binding?.type === 'button-value' ? binding : undefined;
+  const state = cc ?? other;
+  const style = cc?.style ?? (other?.mode === 'gate' ? 'momentary' : other?.mode) ?? 'momentary';
+  const number = (name: string, label: string, value: number, min: number, max: number, styles: string) =>
+    `<label data-cc-fields="${styles}">${label}<input id="bind-${prefix}${name}" type="number" min="${min}" max="${max}" value="${value}" required></label>`;
+  return `<label>Mode<select id="bind-${prefix}style"><option value="momentary">Gate（按住／放開）</option><option value="toggle">Toggle</option><option value="trigger">Trigger</option><option value="inc">Inc</option></select></label>`
+    + number('on', 'On 值', state && 'on' in state ? state.on ?? max : max, 0, max, 'momentary toggle')
+    + number('off', 'Off 值', state && 'off' in state ? state.off ?? 0 : 0, 0, max, 'momentary toggle')
+    + number('value', '觸發值', state && 'value' in state ? state.value ?? max : max, 0, max, 'trigger')
+    + number('from', 'Range From', state && 'from' in state ? state.from ?? 0 : 0, 0, max, 'inc')
+    + number('to', 'Range To', state && 'to' in state ? state.to ?? max : max, 0, max, 'inc')
+    + number('step', 'Step', state && 'step' in state ? state.step ?? 1 : 1, -127, 127, 'inc')
+    + `<label data-cc-fields="inc">Wrap<input id="bind-${prefix}wrap" type="checkbox" ${state && 'wrap' in state && state.wrap ? 'checked' : ''}></label>`
+    + (includeActionOn ? `<label data-cc-fields="toggle trigger inc">Action on<select id="bind-${prefix}action-on"><option value="down">按下</option><option value="up">放開</option></select></label>` : '')
+    + `<input type="hidden" id="bind-${prefix}initial-style" value="${style}">`;
+};
 export interface TranslatorOptions {
   receive: (event: HIDInputReportEvent) => void;
   disconnected: () => void;
@@ -32,7 +53,10 @@ export class TranslatorUI {
   private editingMode = false;
   private engine: MappingEngine;
   private selected: ControlId = 'PAD_1';
+  private hardwareSelectionPending = false;
   private activePads = new Set<string>();
+  private pressedButtons = new Set<string>();
+  private stripRaw = 0;
   private ledEnabled = false;
   private pendingLed: OutputReport | null = null;
   private writingLed = false;
@@ -62,7 +86,10 @@ export class TranslatorUI {
     });
     this.mount();
     if (this.library.warning) this.options.toast(this.library.warning);
-    window.addEventListener('pagehide', () => { this.release(); });
+    window.addEventListener('pagehide', () => {
+      // Browsers do not wait for this promise during navigation or termination.
+      void this.disconnect().catch(() => {});
+    });
   }
   private el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(`midi-${id}`) as T; }
   private mount(): void {
@@ -85,20 +112,35 @@ export class TranslatorUI {
           <div class="section-heading"><div><p class="eyebrow">HARDWARE</p><h2>控制器參照圖</h2></div><span id="midi-mapped-count" class="section-note"></span></div>
           <div class="hardware-scroll"><div id="midi-hardware" class="hardware" aria-label="Mapping 控制器參照圖"></div></div>
           <div class="map-footer"><span><i class="dot selected-dot"></i>目前選取</span><span><i class="dot mapped-dot"></i>已映射</span><span><i class="dot idle-dot"></i>未映射</span></div>
-          <p class="map-hint">點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；選擇燈色即在圖上預覽，套用後才儲存。</p>
-          <details class="device-options"><summary>裝置燈光 <span id="midi-led-summary">尚未接管</span></summary>
-            <label class="switch"><input id="midi-led-enable" type="checkbox" disabled>接管 LED 輸出</label>
-            <p class="caption">啟用後套用本模式 Pad 燈光，按鍵與 Strip 燈會關閉。連線時不會自動改燈，無法還原其他軟體的燈光。</p>
-            <div class="inline-actions led-actions"><button id="midi-led-test" class="outline" disabled>測試選取 Pad</button><button id="midi-led-restore" class="outline" disabled>套用模式燈光</button><button id="midi-led-off" class="text-button" disabled>全部關閉</button></div>
-            <p id="midi-led-status" class="caption" role="status"></p>
+          <p class="map-hint">點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；控制項燈光套用後儲存，裝置燈光中的共用亮度切換後立即儲存。</p>
+          <div class="device-settings">
+          <details class="device-options" open><summary>裝置燈光 <span id="midi-led-summary">尚未接管</span></summary>
+            <div class="led-takeover-row">
+              <label class="switch"><input id="midi-led-enable" type="checkbox" disabled>接管 LED 輸出</label>
+              <p id="midi-led-status" class="caption" role="status"></p>
+            </div>
+            <div class="led-settings">
+              <p class="editor-section-label">本模式共用亮度</p>
+              <label>一般按鍵待機亮度<select id="midi-button-idle-brightness"></select></label>
+              <label>一般按鍵按下亮度<select id="midi-button-on-brightness"></select></label>
+              <label>16 顆 Pad 按下亮度<select id="midi-pad-on-brightness"></select></label>
+            </div>
+            <p class="caption">變更後立即儲存於目前模式；一般按鍵亮度只套用至有映射的按鍵；Pad 待機亮度仍在各 Pad 設定。</p>
           </details>
+          <details class="device-options velocity-options" open><summary>Pad 力度曲線</summary>
+            <div class="led-settings">
+              <label>Pad Velocity Curve<select id="midi-pad-velocity-curve">${PAD_VELOCITY_CURVES.map(value => `<option value="${value}">${value === 'linear' ? 'Linear' : value.replace('-', ' ').replace(/^./, c => c.toUpperCase())}</option>`).join('')}</select></label>
+            </div>
+            <p class="caption">套用至整份設定檔的 Pad 打擊力度，變更後立即儲存。Soft 讓輕敲更響亮；Hard 需要更用力敲。固定力度與 Press 壓力不受影響。</p>
+          </details>
+          </div>
         </section>
         <aside class="panel mapping-editor" aria-label="控制項編輯">
           <div class="editor-heading"><p class="eyebrow">CONTROL INSPECTOR</p><span id="midi-draft-state" class="draft-state" role="status">已套用</span></div>
           <h2 id="midi-selected">Pad 1</h2><p id="midi-binding-summary" class="binding-summary"></p>
           <form id="midi-binding-form">
-            <div class="editor-section-label">MIDI OUTPUT</div><label>輸出動作<select id="midi-action"></select></label>
-            <div id="midi-fields" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
+            <div id="midi-hit-heading" class="editor-section-label">MIDI OUTPUT</div><label>輸出動作<select id="midi-action"></select></label>
+            <div id="midi-fields" class="binding-fields"></div><div id="midi-strip-touch" class="binding-fields"></div><div id="midi-pad-press" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
             <button id="midi-apply" class="primary wide" type="submit">套用至目前模式</button>
           </form>
           <p id="midi-binding-help" class="caption"></p>
@@ -111,6 +153,22 @@ export class TranslatorUI {
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
     this.el('pad-light').addEventListener('input', () => this.previewPadLight());
     this.el('pad-light').addEventListener('change', () => this.previewPadLight());
+    this.el('pad-light').addEventListener('change', event => {
+      if ((event.target as HTMLElement).id === 'bind-color-mode') this.syncPadColorFields();
+    });
+    this.el('pad-press').addEventListener('change', event => {
+      if ((event.target as HTMLElement).id === 'bind-press-type') this.renderPressFields(undefined, true);
+    });
+    this.el('fields').addEventListener('change', event => {
+      if ((event.target as HTMLElement).id === 'bind-style') this.syncCcFields('fields', '');
+      if ((event.target as HTMLElement).id === 'bind-note-mode') this.syncNoteFields();
+      if ((event.target as HTMLElement).id === 'bind-strip-mode') this.syncStripCcFields();
+    });
+    this.el('strip-touch').addEventListener('change', event => {
+      const id = (event.target as HTMLElement).id;
+      if (id === 'bind-touch-type') this.renderTouchFields(undefined, true);
+      if (id === 'bind-touch-style') this.syncCcFields('strip-touch', 'touch-');
+    });
     this.el('profile-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('mode-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('profile-edit').addEventListener('click', () => {
@@ -160,7 +218,8 @@ export class TranslatorUI {
     });
     this.el('action').addEventListener('change', () => {
       const lightDraft = this.readPadLightDraft();
-      this.renderFields(undefined, lightDraft ?? undefined); this.markBindingDirty(); this.previewPadLight();
+      const stripDraft = this.readStripLightDraft();
+      this.renderFields(undefined, lightDraft ?? undefined, stripDraft ?? undefined); this.markBindingDirty(); this.previewPadLight();
     });
     this.el('binding-form').addEventListener('submit', event => { event.preventDefault(); this.guard(() => this.applyBinding()); });
     this.el('panic').addEventListener('click', () => {
@@ -215,19 +274,11 @@ export class TranslatorUI {
       if (this.ledEnabled) this.queueModeLights(); else this.queueLights(PAD_IDS.map(() => ({ color: 0, brightness: 'off' })));
       this.renderDevice();
     });
-    this.el('led-test').addEventListener('click', () => {
-      if (!isPad(this.selected)) return this.options.toast('請先選取一顆 Pad。');
-      const index = Number(this.selected.slice(4)) - 1;
-      const lights: PadLight[] = PAD_IDS.map(() => ({ color: 0, brightness: 'off' }));
-      lights[index] = { color: this.currentMode().pads[index].color, brightness: this.currentMode().pads[index].brightness };
-      this.queueLights(lights);
-    });
-    this.el('led-restore').addEventListener('click', () => this.queueModeLights());
-    this.el('led-off').addEventListener('click', () => {
-      this.ledEnabled = false; this.ledGeneration++; this.pendingLed = null;
-      this.queueLights(PAD_IDS.map(() => ({ color: 0, brightness: 'off' }))); this.renderDevice();
-    });
-    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.selectControl(this.selected); this.renderPorts(); this.renderDevice(); this.renderSaveState();
+    for (const id of ['button-idle-brightness', 'button-on-brightness', 'pad-on-brightness']) {
+      this.el<HTMLSelectElement>(id).addEventListener('change', () => this.saveLedSettings());
+    }
+    this.el<HTMLSelectElement>('pad-velocity-curve').addEventListener('change', () => this.saveVelocityCurve());
+    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.selectControl(this.selected); this.renderPorts(); this.renderDevice(); this.renderSaveState(); this.queueModeLights();
   }
   private async guard(action: () => void | Promise<void>): Promise<void> {
     try { await action(); } catch (error) { this.options.toast(error instanceof Error ? error.message : String(error)); }
@@ -237,6 +288,14 @@ export class TranslatorUI {
     if (id !== this.selected && !await this.discardBindingDraft()) return;
     this.selected = id;
     this.el('selected').textContent = controlName(id); this.renderBinding(); this.renderMap();
+  }
+  private selectHardwareControl(id: ControlId): void {
+    if (id === this.selected || this.hardwareSelectionPending || document.getElementById('page-mapping')?.hidden !== false) return;
+    this.hardwareSelectionPending = true;
+    void this.guard(async () => {
+      try { await this.selectControl(id); }
+      finally { this.hardwareSelectionPending = false; }
+    });
   }
   private async discardBindingDraft(): Promise<boolean> {
     if (!this.bindingDirty) return true;
@@ -282,39 +341,171 @@ export class TranslatorUI {
     if (!this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     if (!this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
     this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.engine.activeModeId;
+    this.renderLedSettings();
+  }
+  private renderLedSettings(): void {
+    this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
+    const mode = this.currentMode();
+    this.el<HTMLSelectElement>('button-idle-brightness').innerHTML = brightnessOptions(mode.buttonLight?.off ?? 'off');
+    this.el<HTMLSelectElement>('button-on-brightness').innerHTML = brightnessOptions(mode.buttonLight?.on ?? 'normal');
+    this.el<HTMLSelectElement>('pad-on-brightness').innerHTML = brightnessOptions(mode.padOnBrightness ?? 'bright');
+  }
+  private saveVelocityCurve(): void {
+    const next = parseProfile({ ...this.profile, padVelocityCurve: this.el<HTMLSelectElement>('pad-velocity-curve').value as PadVelocityCurve });
+    try {
+      this.library.save(next);
+      this.profile = next;
+      // Only future hits change; preserve held notes and their release targets.
+      this.engine.profile.padVelocityCurve = next.padVelocityCurve;
+      this.renderSaveState();
+    } catch (error) {
+      this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
+      this.options.toast(`力度曲線儲存失敗：${String(error)}`);
+    }
+  }
+  private saveLedSettings(): void {
+    const off = this.el<HTMLSelectElement>('button-idle-brightness').value as Brightness;
+    const on = this.el<HTMLSelectElement>('button-on-brightness').value as Brightness;
+    const padOn = this.el<HTMLSelectElement>('pad-on-brightness').value as Brightness;
+    const next = parseProfile(this.profile);
+    const mode = next.modes.find(m => m.id === this.engine.activeModeId)!;
+    mode.buttonLight = { off, on };
+    mode.padOnBrightness = padOn;
+    try {
+      this.library.save(next);
+      this.profile = next;
+      this.renderPressed(); this.queueModeLights(); this.renderSaveState();
+    } catch (error) {
+      this.renderLedSettings();
+      this.options.toast(`燈光設定儲存失敗：${String(error)}`);
+    }
   }
   private renderBinding(): void {
     this.bindingDirty = false;
     this.el('draft-state').textContent = '已套用'; this.el('draft-state').classList.remove('unsaved');
-    this.el('binding-summary').textContent = this.bindingLabel(this.currentMode().bindings[this.selected]);
+    this.el('hit-heading').textContent = isPad(this.selected) ? 'PAD HIT · 敲擊' : this.selected === 'SMART_STRIP' ? 'STRIP POSITION · 位置' : 'MIDI OUTPUT';
+    const press = isPad(this.selected) ? this.currentMode().pressureBindings?.[this.selected] : undefined;
+    const touch = this.selected === 'SMART_STRIP' ? this.currentMode().bindings.SMART_STRIP_TOUCH : undefined;
+    this.el('binding-summary').textContent = this.controlSummary(this.selected);
     const continuous = this.selected === 'ENCODER_ROTATE' || this.selected === 'SMART_STRIP';
-    const actions = continuous ? [['none', '停用'], ['cc', 'MIDI CC']] : [['none', '停用'], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['program', 'Program Change'], ['mode', '切換模式']];
+    const actions = this.selected === 'SMART_STRIP'
+      ? [['none', '停用'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend']]
+      : continuous ? [['none', '停用'], ['cc', 'MIDI CC']] : isPad(this.selected)
+        ? [['none', '停用'], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', '切換模式']]
+        : [['none', '停用'], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', '切換模式']];
     this.el<HTMLSelectElement>('action').innerHTML = actions.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
     const b = this.currentMode().bindings[this.selected];
-    this.el<HTMLSelectElement>('action').value = b?.type ?? 'none';
-    this.renderFields(b); this.renderSaveState();
+    this.el<HTMLSelectElement>('action').value = b?.type === 'strip-position' || b?.type === 'button-value' ? b.output : b?.type ?? 'none';
+    this.renderFields(b); this.renderTouchFields(touch); this.renderPressFields(press); this.renderSaveState();
   }
-  private renderFields(existing?: Binding, lightDraft?: PadLight): void {
-    const action = this.el<HTMLSelectElement>('action').value;
+  private syncCcFields(container: 'fields' | 'strip-touch', prefix: string): void {
+    const root = this.el(container);
+    const style = (document.getElementById(`bind-${prefix}style`) as HTMLSelectElement).value;
+    root.querySelectorAll<HTMLElement>('[data-cc-fields]').forEach(label => {
+      const show = label.dataset.ccFields!.split(' ').includes(style);
+      label.hidden = !show;
+      label.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select').forEach(input => { input.disabled = !show; });
+    });
+  }
+  private syncNoteFields(): void {
+    const toggle = (document.getElementById('bind-note-mode') as HTMLSelectElement).value === 'toggle';
+    const label = document.getElementById('bind-note-action-on')?.closest('label');
+    if (!label) return;
+    label.hidden = !toggle;
+    (document.getElementById('bind-note-action-on') as HTMLSelectElement).disabled = !toggle;
+  }
+  private syncStripCcFields(): void {
+    const mode = (document.getElementById('bind-strip-mode') as HTMLSelectElement).value;
+    this.el('fields').querySelectorAll<HTMLElement>('[data-strip-cc-fields]').forEach(label => {
+      const show = label.dataset.stripCcFields!.split(' ').includes(mode);
+      label.hidden = !show;
+      label.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.disabled = !show; });
+    });
+  }
+  private renderTouchFields(existing?: Binding, fromSelection = false): void {
+    if (this.selected !== 'SMART_STRIP') { this.el('strip-touch').innerHTML = ''; return; }
+    const action = fromSelection ? (document.getElementById('bind-touch-type') as HTMLSelectElement).value
+      : existing?.type === 'value' ? existing.output : existing?.type === 'system' ? existing.command : existing?.type ?? 'none';
+    const b = fromSelection ? undefined : existing;
+    let fields = '<div class="editor-section-label">STRIP TOUCH · 觸碰／放開</div>';
+    fields += `<label>Touch 動作<select id="bind-touch-type">${[['none','停用'],['note','Note'],['cc','Control Change'],['poly-pressure','Poly Pressure'],['channel-pressure','Channel Pressure'],['program','Program Change'],['pitchbend','Pitchbend'],['start','Start'],['stop','Stop'],['continue','Continue'],['song-position','Song Position']].map(([id,label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>`;
+    if (!['none', 'start', 'stop', 'continue', 'song-position'].includes(action)) fields += field('touch-channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
+    if (action === 'note') fields += field('touch-note', 'Note Number', b?.type === 'note' ? b.note : 36) + '';
+    else if (action === 'cc') {
+      fields += field('touch-controller', 'CC Number', b?.type === 'cc' ? b.controller : 1);
+      fields += ccFields('touch-', b);
+    } else if (action === 'poly-pressure' || action === 'channel-pressure' || action === 'pitchbend') {
+      const v = b?.type === 'value' && b.output === action ? b : undefined;
+      const max = action === 'pitchbend' ? 16383 : 127;
+      if (action === 'poly-pressure') fields += field('touch-note', 'Note Number', v?.note ?? 36);
+      fields += field('touch-on', '碰上值', v?.on ?? max, 0, max) + field('touch-off', '放開值', v?.off ?? (action === 'pitchbend' ? 8192 : 0), 0, max);
+    } else if (action === 'program') fields += field('touch-program', 'Program Number', b?.type === 'program' ? b.program : 0);
+    else if (action === 'song-position') fields += field('touch-position', 'Song Position', b?.type === 'system' ? b.position ?? 0 : 0, 0, 16383);
+    this.el('strip-touch').innerHTML = fields;
+    (document.getElementById('bind-touch-type') as HTMLSelectElement).value = action;
+    if (action === 'cc') {
+      (document.getElementById('bind-touch-style') as HTMLSelectElement).value = b?.type === 'cc' ? b.style : 'momentary';
+      (document.getElementById('bind-touch-action-on') as HTMLSelectElement).value = b?.type === 'cc' && 'actionOn' in b ? b.actionOn ?? 'down' : 'down';
+      this.syncCcFields('strip-touch', 'touch-');
+    }
+  }
+  private pressureLabel(binding: PressureBinding): string {
+    if (binding.type === 'off') return '停用';
+    const prefix = `CH ${binding.channel} · `;
+    if (binding.type === 'note') return `${prefix}Note ${binding.note}`;
+    if (binding.type === 'poly-pressure') return `${prefix}Poly Pressure · Note ${binding.note}`;
+    if (binding.type === 'cc') return `${prefix}CC ${binding.controller}`;
+    return prefix + (binding.type === 'channel-pressure' ? 'Channel Pressure' : 'Pitchbend');
+  }
+  private renderPressFields(existing?: PressureBinding, fromSelection = false): void {
+    if (!isPad(this.selected)) { this.el('pad-press').innerHTML = ''; return; }
+    const action = fromSelection ? (document.getElementById('bind-press-type') as HTMLSelectElement).value : existing?.type ?? 'off';
     const b = existing?.type === action ? existing : undefined;
+    let fields = `<div class="editor-section-label">PAD PRESS · 持續施壓</div><label>壓力動作<select id="bind-press-type"><option value="off">停用</option><option value="note">MIDI Note（壓力門檻）</option><option value="cc">MIDI CC</option><option value="poly-pressure">Poly Pressure</option><option value="channel-pressure">Channel Pressure</option><option value="pitchbend">Pitchbend</option></select></label>`;
+    if (action !== 'off') {
+      fields += field('press-channel', '壓力 MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
+      if (action === 'note') {
+        const n = b?.type === 'note' ? b : undefined;
+        const hit = this.currentMode().bindings[this.selected];
+        fields += field('press-note', '壓力 Note', n?.note ?? (hit?.type === 'note' ? hit.note : 36));
+        fields += field('press-velocity', '觸發力度', n?.velocity ?? 100, 1, 127);
+        fields += field('press-off-threshold', '放開門檻 %', n?.offThreshold ?? 10, 0, 99);
+        fields += field('press-on-threshold', '觸發門檻 %', n?.onThreshold ?? 20, 1, 100);
+      } else {
+        if (action === 'cc') fields += field('press-controller', '壓力 CC Number', b?.type === 'cc' ? b.controller : 1);
+        if (action === 'poly-pressure') {
+          const hit = this.currentMode().bindings[this.selected];
+          fields += field('press-note', '壓力 Note', b?.type === 'poly-pressure' ? b.note : hit?.type === 'note' ? hit.note : 36);
+        }
+        const bend = action === 'pitchbend';
+        fields += field('press-from', bend ? '最小彎音 %' : '輸出最小值', b && 'from' in b ? b.from : 0, bend ? -100 : 0, bend ? 100 : 127);
+        fields += field('press-to', bend ? '最大彎音 %' : '輸出最大值', b && 'to' in b ? b.to : bend ? 100 : 127, bend ? -100 : 0, bend ? 100 : 127);
+      }
+    }
+    this.el('pad-press').innerHTML = fields;
+    (document.getElementById('bind-press-type') as HTMLSelectElement).value = action;
+  }
+  private renderFields(existing?: Binding, lightDraft?: PadLight,
+    stripDraft?: { mode: StripLightMode; brightness: Brightness; color?: number }): void {
+    const action = this.el<HTMLSelectElement>('action').value;
+    const b = existing?.type === action || (existing?.type === 'strip-position' || existing?.type === 'button-value') && existing.output === action ? existing : undefined;
     let fields = '';
     if (action !== 'none' && action !== 'mode') fields += field('channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
     if (action === 'note') {
       const note = b?.type === 'note' ? b : undefined;
       fields += field('note', 'Note Number', note?.note ?? 36);
       const pad = isPad(this.selected);
-      fields += `<label>力度來源<select id="bind-velocity-source">${pad ? '<option value="pad">Pad 原始力度換算</option>' : ''}<option value="fixed">固定力度</option></select></label>`;
-      fields += field('velocity', '固定力度', typeof note?.velocity === 'number' ? note.velocity : 100, 1, 127);
+      fields += '<label>Mode<select id="bind-note-mode"><option value="gate">Gate</option><option value="toggle">Toggle</option></select></label>';
+      if (pad) {
+        const fixed = typeof note?.velocity === 'number' ? note.velocity : undefined;
+        fields += field('velocity-min', '輸出最小值', fixed ?? note?.velocityMin ?? 0)
+          + field('velocity-max', '輸出最大值', fixed ?? note?.velocityMax ?? 127);
+      }
+      if (!pad) fields += '<label>Action on<select id="bind-note-action-on"><option value="down">按下</option><option value="up">放開</option></select></label>';
       this.el('fields').innerHTML = fields;
-      (document.getElementById('bind-velocity-source') as HTMLSelectElement).value = note?.velocity === 'pad' || !note && pad ? 'pad' : 'fixed';
-      const velocitySource = document.getElementById('bind-velocity-source') as HTMLSelectElement;
-      const fixedVelocity = document.getElementById('bind-velocity') as HTMLInputElement;
-      const showVelocity = () => {
-        const fixed = velocitySource.value === 'fixed';
-        fixedVelocity.disabled = !fixed; fixedVelocity.closest('label')!.hidden = !fixed;
-        velocitySource.closest('label')!.style.gridColumn = fixed ? '' : '1 / -1';
-      };
-      velocitySource.addEventListener('change', showVelocity); showVelocity();
+      (document.getElementById('bind-note-mode') as HTMLSelectElement).value = note?.mode ?? 'gate';
+      if (!pad) (document.getElementById('bind-note-action-on') as HTMLSelectElement).value = note?.actionOn ?? 'down';
+      this.syncNoteFields();
     } else {
       if (action === 'cc') {
         const cc = b?.type === 'cc' ? b : undefined;
@@ -325,47 +516,148 @@ export class TranslatorUI {
         } else if (this.selected === 'SMART_STRIP') {
           const strip = cc?.style === 'strip' ? cc : undefined;
           fields += field('raw-min', '原始有效最小值', strip?.rawMin ?? 1, 1, 254) + field('raw-max', '原始有效最大值', strip?.rawMax ?? 200, 2, 255);
+          fields += '<label>Mode<select id="bind-strip-mode"><option value="absolute">Absolute</option><option value="relative">Relative</option><option value="relative-offset">Relative (Offset)</option></select></label>';
+          fields += `<label data-strip-cc-fields="absolute">Range From<input id="bind-strip-from" type="number" min="0" max="127" value="${strip?.from ?? 0}" required></label>`;
+          fields += `<label data-strip-cc-fields="absolute">Range To<input id="bind-strip-to" type="number" min="0" max="127" value="${strip?.to ?? 127}" required></label>`;
+          fields += `<label data-strip-cc-fields="relative relative-offset">Step<input id="bind-strip-step" type="number" min="-127" max="127" value="${strip?.step ?? 1}" required></label>`;
+          fields += `<label data-strip-cc-fields="relative relative-offset">Resolution（全長步數；越大越靈敏）<input id="bind-strip-resolution" type="number" min="1" max="200" value="${strip?.resolution ?? 25}" required></label>`;
         } else {
-          fields += `<label>按鍵行為<select id="bind-style"><option value="momentary">按住／放開</option><option value="toggle">每次按下切換</option></select></label>`;
-          fields += field('on', '開啟值', cc && 'on' in cc ? cc.on : 127) + field('off', '關閉值', cc && 'off' in cc ? cc.off : 0);
+          fields += ccFields('', cc, 127, !isPad(this.selected));
         }
-      } else if (action === 'program') fields += field('program', 'Program Number（0–127）', b?.type === 'program' ? b.program : 0);
-      else if (action === 'mode') fields += `<label>目標模式<select id="bind-mode">${this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('')}</select></label>`;
+      } else if (this.selected === 'SMART_STRIP' && ['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
+        const position = b?.type === 'strip-position' ? b : undefined;
+        const max = action === 'pitchbend' ? 16383 : 127;
+        if (action === 'poly-pressure') fields += field('note', 'Note Number', position?.note ?? 36);
+        fields += field('from', 'Range From', position?.from ?? 0, 0, max) + field('to', 'Range To', position?.to ?? max, 0, max);
+      } else if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
+        const button = b?.type === 'button-value' ? b : b?.type === 'program' && action === 'program'
+          ? { type: 'button-value' as const, channel: b.channel, output: 'program' as const, mode: 'trigger' as const, value: b.program } : undefined;
+        if (action === 'poly-pressure') fields += field('note', 'Note Number', button?.note ?? 36);
+        fields += ccFields('', button, action === 'pitchbend' ? 16383 : 127, !isPad(this.selected));
+      } else if (action === 'mode') fields += `<label>目標模式<select id="bind-mode">${this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('')}</select></label>`;
       this.el('fields').innerHTML = fields;
       if (b?.type === 'mode') (document.getElementById('bind-mode') as HTMLSelectElement).value = b.modeId;
-      if (b?.type === 'cc' && (b.style === 'momentary' || b.style === 'toggle')) (document.getElementById('bind-style') as HTMLSelectElement).value = b.style;
+      if (action === 'cc' && this.selected !== 'ENCODER_ROTATE' && this.selected !== 'SMART_STRIP') {
+        (document.getElementById('bind-style') as HTMLSelectElement).value = b?.type === 'cc' ? b.style : 'momentary';
+        if (!isPad(this.selected)) (document.getElementById('bind-action-on') as HTMLSelectElement).value = b?.type === 'cc' && 'actionOn' in b ? b.actionOn ?? 'down' : 'down';
+        this.syncCcFields('fields', '');
+      }
+      if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action) && this.selected !== 'SMART_STRIP') {
+        const button = b?.type === 'button-value' ? b : undefined;
+        (document.getElementById('bind-style') as HTMLSelectElement).value = button?.mode === 'gate' ? 'momentary' : button?.mode ?? (b?.type === 'program' ? 'trigger' : 'momentary');
+        if (!isPad(this.selected)) (document.getElementById('bind-action-on') as HTMLSelectElement).value = button?.actionOn ?? 'down';
+        this.syncCcFields('fields', '');
+      }
+      if (action === 'cc' && this.selected === 'SMART_STRIP') {
+        (document.getElementById('bind-strip-mode') as HTMLSelectElement).value = b?.type === 'cc' && b.style === 'strip' ? b.mode ?? 'absolute' : 'absolute';
+        this.syncStripCcFields();
+      }
     }
     const index = isPad(this.selected) ? Number(this.selected.slice(4)) - 1 : -1;
     const light = lightDraft ?? this.currentMode().pads[index];
-    this.el('pad-light').innerHTML = light ? `<div class="editor-section-label">PAD LIGHT</div><label>Pad 色彩<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label>待機亮度<select id="bind-brightness">${[['off', '關閉'], ['dim', '低'], ['normal', '中'], ['bright', '高']].map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>` : '';
+    const stripLight = this.selected === 'SMART_STRIP' ? stripDraft ?? this.currentMode().stripLight ?? { mode: 'dot', brightness: 'normal' } : null;
+    this.el('pad-light').innerHTML = light
+      ? `<div class="editor-section-label">PAD LIGHT</div><label>Color Mode<select id="bind-color-mode"><option value="single">Single · 同色明暗</option><option value="dual">Dual · 兩種顏色</option></select></label><label>待機色（Color Off）<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label data-pad-dual>按下色（Color On）<select id="bind-on-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label>待機亮度<select id="bind-brightness">${brightnessOptions(light.brightness)}</select></label>`
+      : stripLight
+          ? `<div class="editor-section-label">STRIP LIGHT</div><label>LED Mode<select id="bind-strip-led-mode"><option value="dot">Dot · 單點</option><option value="bar">Bar · 左側累積</option><option value="pan">Pan · 中央向兩側</option></select></label><label>Color Value<select id="bind-strip-led-color">${PAD_COLORS.slice(1).map((name, i) => `<option value="${i + 1}">${name}</option>`).join('')}</select></label><label>亮度<select id="bind-strip-led-brightness">${brightnessOptions(stripLight.brightness)}</select></label>` : '';
     if (light) {
+      (document.getElementById('bind-color-mode') as HTMLSelectElement).value = light.onColor === undefined ? 'single' : 'dual';
       (document.getElementById('bind-color') as HTMLSelectElement).value = String(light.color);
-      (document.getElementById('bind-brightness') as HTMLSelectElement).value = light.brightness;
+      (document.getElementById('bind-on-color') as HTMLSelectElement).value = String(light.onColor ?? light.color);
+      this.syncPadColorFields();
+    }
+    if (stripLight) {
+      (document.getElementById('bind-strip-led-mode') as HTMLSelectElement).value = stripLight.mode;
+      (document.getElementById('bind-strip-led-color') as HTMLSelectElement).value = String(stripLight.color ?? 17);
     }
     this.el('binding-help').textContent = this.selected === 'ENCODER_ROTATE'
       ? '輸入保留原始計數差。Rust 未定義回繞範圍；預設不回繞，可依實機觀察設定。首份報告只建立基線。'
-      : this.selected === 'SMART_STRIP' ? '原值 0 依 Rust 行為不送 CC；有效範圍預設 1–200，請依實機端點調整，不將它判定成觸碰手勢。'
-      : isPad(this.selected) ? '燈色與亮度會立即在圖上預覽；按「套用至目前模式」後才儲存。若已接管燈光，也會更新裝置。'
-      : '按「套用至目前模式」會更新這個模式的控制項，並自動儲存整份設定檔。Note 使用 0–127 數字。';
+      : this.selected === 'SMART_STRIP' ? '實機確認：0 是放開、1 是最左、200 是最右。Position 與 Touch 分別設定；Touch 在碰上與放開時觸發。'
+      : isPad(this.selected) ? 'Hit Note 先套用力度曲線，再換算至輸出最小值／最大值；兩者相同可固定力度。有效敲擊至少輸出 1。Press 獨立設定。待機色立即在圖上預覽，按「套用至目前模式」後才儲存。'
+      : '按「套用至目前模式」會更新這個模式的控制項，並自動儲存整份設定檔。Note Number 使用 0–127 數字；Note 輸出力度固定為 127。';
   }
   private applyBinding(): void {
     const val = (id: string) => (document.getElementById(`bind-${id}`) as HTMLInputElement).value;
     const num = (id: string) => Number(val(id));
+    const switchCc = (prefix: string, shared: { type: 'cc'; channel: number; controller: number }): Binding => {
+      const style = val(`${prefix}style`);
+      if (style === 'momentary') return { ...shared, style, on: num(`${prefix}on`), off: num(`${prefix}off`) };
+      const actionOn = prefix || !isPad(this.selected) ? { actionOn: val(`${prefix}action-on`) as 'down' | 'up' } : {};
+      if (style === 'toggle') return { ...shared, style, on: num(`${prefix}on`), off: num(`${prefix}off`), ...actionOn };
+      if (style === 'trigger') return { ...shared, style, value: num(`${prefix}value`), ...actionOn };
+      return { ...shared, style: 'inc', from: num(`${prefix}from`), to: num(`${prefix}to`), step: num(`${prefix}step`), wrap: (document.getElementById(`bind-${prefix}wrap`) as HTMLInputElement).checked, ...actionOn };
+    };
     const action = this.el<HTMLSelectElement>('action').value;
     let b: Binding = { type: 'none' };
-    if (action === 'note') b = { type: 'note', channel: num('channel'), note: num('note'), velocity: val('velocity-source') === 'pad' ? 'pad' : num('velocity') };
-    else if (action === 'program') b = { type: 'program', channel: num('channel'), program: num('program') };
+    if (action === 'note') {
+      const noteMode = val('note-mode') as 'gate' | 'toggle';
+      const pad = isPad(this.selected);
+      if (pad && num('velocity-min') > num('velocity-max')) throw new Error('輸出最小值不可大於輸出最大值。');
+      b = { type: 'note', channel: num('channel'), note: num('note'), velocity: pad ? 'pad' : 127,
+        ...(pad ? { velocityMin: num('velocity-min'), velocityMax: num('velocity-max') } : {}),
+        mode: noteMode, ...(noteMode === 'toggle' && !isPad(this.selected) ? { actionOn: val('note-action-on') as 'down' | 'up' } : {}) };
+    }
     else if (action === 'mode') b = { type: 'mode', modeId: val('mode') };
     else if (action === 'cc') {
       const shared = { type: 'cc' as const, channel: num('channel'), controller: num('controller') };
       if (this.selected === 'ENCODER_ROTATE') b = { ...shared, style: 'encoder', step: num('step'), initial: num('initial'), modulus: num('modulus') };
-      else if (this.selected === 'SMART_STRIP') b = { ...shared, style: 'strip', rawMin: num('raw-min'), rawMax: num('raw-max') };
-      else b = { ...shared, style: val('style') as 'momentary' | 'toggle', on: num('on'), off: num('off') };
+      else if (this.selected === 'SMART_STRIP') {
+        const mode = val('strip-mode') as 'absolute' | 'relative' | 'relative-offset';
+        b = { ...shared, style: 'strip', rawMin: num('raw-min'), rawMax: num('raw-max'), mode,
+          ...(mode === 'absolute' ? { from: num('strip-from'), to: num('strip-to') } : { step: num('strip-step'), resolution: num('strip-resolution') }) };
+      }
+      else b = switchCc('', shared);
+    } else if (this.selected === 'SMART_STRIP' && ['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
+      b = { type: 'strip-position', channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
+        ...(action === 'poly-pressure' ? { note: num('note') } : {}), from: num('from'), to: num('to') };
+    } else if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
+      const shared = { type: 'button-value' as const, channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
+        ...(action === 'poly-pressure' ? { note: num('note') } : {}) };
+      const style = val('style');
+      const actionOn = !isPad(this.selected) ? { actionOn: val('action-on') as 'down' | 'up' } : {};
+      if (style === 'momentary') b = { ...shared, mode: 'gate', on: num('on'), off: num('off') };
+      else if (style === 'toggle') b = { ...shared, mode: 'toggle', on: num('on'), off: num('off'), ...actionOn };
+      else if (style === 'trigger') b = { ...shared, mode: 'trigger', value: num('value'), ...actionOn };
+      else b = { ...shared, mode: 'inc', from: num('from'), to: num('to'), step: num('step'), wrap: (document.getElementById('bind-wrap') as HTMLInputElement).checked, ...actionOn };
     }
     const next = JSON.parse(JSON.stringify(this.profile)) as Profile;
     const mode = next.modes.find(m => m.id === this.engine.activeModeId)!;
     mode.bindings[this.selected] = b;
-    if (isPad(this.selected)) mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: val('brightness') as PadLight['brightness'] };
+    if (this.selected === 'SMART_STRIP') {
+      const touch = val('touch-type');
+      let touchBinding: Binding = { type: 'none' };
+      if (touch === 'note') touchBinding = { type: 'note', channel: num('touch-channel'), note: num('touch-note'), velocity: 127 };
+      else if (touch === 'cc') touchBinding = switchCc('touch-', { type: 'cc', channel: num('touch-channel'), controller: num('touch-controller') });
+      else if (touch === 'program') touchBinding = { type: 'program', channel: num('touch-channel'), program: num('touch-program') };
+      else if (touch === 'poly-pressure' || touch === 'channel-pressure' || touch === 'pitchbend') touchBinding = {
+        type: 'value', channel: num('touch-channel'), output: touch,
+        ...(touch === 'poly-pressure' ? { note: num('touch-note') } : {}), on: num('touch-on'), off: num('touch-off')
+      };
+      else if (touch === 'start' || touch === 'stop' || touch === 'continue' || touch === 'song-position') touchBinding = {
+        type: 'system', command: touch, ...(touch === 'song-position' ? { position: num('touch-position') } : {})
+      };
+      if (touchBinding.type === 'none') delete mode.bindings.SMART_STRIP_TOUCH;
+      else mode.bindings.SMART_STRIP_TOUCH = touchBinding;
+    }
+    if (isPad(this.selected)) {
+      mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: val('brightness') as PadLight['brightness'],
+        ...(val('color-mode') === 'dual' ? { onColor: num('on-color') } : {}) };
+      const action = val('press-type');
+      let press: PressureBinding = { type: 'off' };
+      if (action === 'note') press = { type: 'note', channel: num('press-channel'), note: num('press-note'), velocity: num('press-velocity'), offThreshold: num('press-off-threshold'), onThreshold: num('press-on-threshold') };
+      else if (action === 'cc') press = { type: 'cc', channel: num('press-channel'), controller: num('press-controller'), from: num('press-from'), to: num('press-to') };
+      else if (action === 'poly-pressure') press = { type: 'poly-pressure', channel: num('press-channel'), note: num('press-note'), from: num('press-from'), to: num('press-to') };
+      else if (action === 'channel-pressure') press = { type: 'channel-pressure', channel: num('press-channel'), from: num('press-from'), to: num('press-to') };
+      else if (action === 'pitchbend') press = { type: 'pitchbend', channel: num('press-channel'), from: num('press-from'), to: num('press-to') };
+      if (press.type === 'off') {
+        delete mode.pressureBindings?.[this.selected];
+        if (mode.pressureBindings && !Object.keys(mode.pressureBindings).length) delete mode.pressureBindings;
+      } else (mode.pressureBindings ??= {})[this.selected] = press;
+    }
+    if (this.selected === 'SMART_STRIP') mode.stripLight = {
+      mode: val('strip-led-mode') as StripLightMode, brightness: val('strip-led-brightness') as Brightness,
+      color: num('strip-led-color')
+    };
     this.profile = parseProfile(next); this.bindingDirty = false;
     const saved = this.commit(); this.renderBinding();
     if (saved) this.options.toast('已套用至目前模式，設定檔已儲存。');
@@ -411,12 +703,40 @@ export class TranslatorUI {
       this.options.toast('設定檔已儲存。');
     } catch (error) { this.options.toast(`儲存失敗：${String(error)}`); }
   }
+  private controlSummary(id: ControlId): string {
+    const mode = this.currentMode();
+    const hit = this.bindingLabel(mode.bindings[id]);
+    if (isPad(id)) {
+      const press = mode.pressureBindings?.[id];
+      return `Hit：${hit}\nPress：${press && press.type !== 'off' ? this.pressureLabel(press) : '停用'}`;
+    }
+    const touch = id === 'SMART_STRIP' ? mode.bindings.SMART_STRIP_TOUCH : undefined;
+    return `${hit}${touch && touch.type !== 'none' ? ` · Touch ${this.bindingLabel(touch)}` : ''}`;
+  }
   private bindingLabel(binding?: Binding): string {
     if (!binding || binding.type === 'none') return '未映射';
     if (binding.type === 'mode') return `模式 → ${this.profile.modes.find(m => m.id === binding.modeId)?.name ?? binding.modeId}`;
-    if (binding.type === 'note') return `CH ${binding.channel} · Note ${binding.note}`;
-    if (binding.type === 'cc') return `CC ${binding.controller} · CH ${binding.channel}`;
-    return `Program ${binding.program} · CH ${binding.channel}`;
+    if (binding.type === 'note') return `CH ${binding.channel} · Note ${binding.note} · ${binding.mode === 'toggle' ? 'Toggle' : 'Gate'}`;
+    if (binding.type === 'cc') return `CH ${binding.channel} · CC ${binding.controller}${['momentary', 'toggle', 'trigger', 'inc'].includes(binding.style) ? ` · ${{ momentary: 'Gate', toggle: 'Toggle', trigger: 'Trigger', inc: 'Inc' }[binding.style as 'momentary' | 'toggle' | 'trigger' | 'inc']}` : binding.style === 'strip' ? ` · ${{ absolute: 'Absolute', relative: 'Relative', 'relative-offset': 'Relative (Offset)' }[binding.mode ?? 'absolute']}` : ''}`;
+    if (binding.type === 'strip-position' || binding.type === 'value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · Note ${binding.note}` : ''}`;
+    if (binding.type === 'button-value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · Note ${binding.note}` : ''} · ${binding.mode === 'gate' ? 'Gate' : binding.mode === 'inc' ? 'Inc' : binding.mode === 'trigger' ? 'Trigger' : 'Toggle'}`;
+    if (binding.type === 'system') return binding.command;
+    return `CH ${binding.channel} · Program ${binding.program}`;
+  }
+  private syncPadColorFields(): void {
+    const dual = (document.getElementById('bind-color-mode') as HTMLSelectElement | null)?.value === 'dual';
+    const label = this.el('pad-light').querySelector<HTMLElement>('[data-pad-dual]');
+    if (label) {
+      label.hidden = !dual;
+      label.querySelector<HTMLSelectElement>('select')!.disabled = !dual;
+    }
+  }
+  private readStripLightDraft(): { mode: StripLightMode; brightness: Brightness; color?: number } | null {
+    if (this.selected !== 'SMART_STRIP') return null;
+    const mode = (document.getElementById('bind-strip-led-mode') as HTMLSelectElement | null)?.value as StripLightMode | undefined;
+    const brightness = (document.getElementById('bind-strip-led-brightness') as HTMLSelectElement | null)?.value as Brightness | undefined;
+    const colorValue = (document.getElementById('bind-strip-led-color') as HTMLSelectElement | null)?.value;
+    return mode && brightness ? { mode, brightness, color: colorValue === undefined ? 17 : Number(colorValue) } : null;
   }
   private readPadLightDraft(): PadLight | null {
     if (!isPad(this.selected)) return null;
@@ -424,9 +744,13 @@ export class TranslatorUI {
     const brightnessInput = document.getElementById('bind-brightness') as HTMLSelectElement | null;
     if (!colorInput || !brightnessInput) return null;
     const color = Number(colorInput.value);
+    const dual = (document.getElementById('bind-color-mode') as HTMLSelectElement | null)?.value === 'dual';
+    const onColor = dual ? Number((document.getElementById('bind-on-color') as HTMLSelectElement | null)?.value) : undefined;
     const brightness = brightnessInput.value as PadLight['brightness'];
-    if (!Number.isInteger(color) || color < 0 || color >= PAD_COLORS.length || !['off', 'dim', 'normal', 'bright'].includes(brightness)) return null;
-    return { color, brightness };
+    if (!Number.isInteger(color) || color < 0 || color >= PAD_COLORS.length ||
+      onColor !== undefined && (!Number.isInteger(onColor) || onColor < 0 || onColor >= PAD_COLORS.length) ||
+      !['off', 'dim', 'normal', 'bright'].includes(brightness)) return null;
+    return { color, onColor, brightness };
   }
   private paintPad(button: HTMLButtonElement, light: PadLight, preview = false): void {
     button.style.setProperty('--pad-color', PAD_PREVIEW[light.color]);
@@ -438,21 +762,26 @@ export class TranslatorUI {
     const draft = this.readPadLightDraft();
     if (!draft) return;
     const saved = this.currentMode().pads[Number(this.selected.slice(4)) - 1];
-    const preview = draft.color !== saved.color || draft.brightness !== saved.brightness;
+    const preview = draft.color !== saved.color || draft.onColor !== (saved.onColor ?? saved.color) || draft.brightness !== saved.brightness;
     const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${this.selected}"]`);
     if (!button) return;
     this.paintPad(button, draft, preview);
-    button.title = `${controlName(this.selected)} · ${this.bindingLabel(this.currentMode().bindings[this.selected])}${preview ? ' · 燈色預覽，尚未套用' : ''}`;
+    button.title = `${controlName(this.selected)} · ${this.controlSummary(this.selected)}${preview ? ' · 燈色預覽，尚未套用' : ''}`;
     button.setAttribute('aria-label', `選取 ${button.title}`);
   }
   private renderMap(): void {
-    const count = Object.values(this.currentMode().bindings).filter(b => b && b.type !== 'none').length;
+    const count = new Set([
+      ...Object.entries(this.currentMode().bindings).filter(([, b]) => b && b.type !== 'none').map(([id]) => id === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : id),
+      ...Object.entries(this.currentMode().pressureBindings ?? {}).filter(([, b]) => b && b.type !== 'off').map(([id]) => id)
+    ]).size;
     this.el('hardware').querySelectorAll<HTMLButtonElement>('[data-control]').forEach(button => {
       const id = button.dataset.control as ControlId, binding = this.currentMode().bindings[id];
-      const mapped = Boolean(binding && binding.type !== 'none');
+      const press = isPad(id) ? this.currentMode().pressureBindings?.[id] : undefined;
+      const touch = id === 'SMART_STRIP' ? this.currentMode().bindings.SMART_STRIP_TOUCH : undefined;
+      const mapped = Boolean(binding && binding.type !== 'none' || press && press.type !== 'off' || touch && touch.type !== 'none');
       button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', id === this.selected);
       button.setAttribute('aria-pressed', String(id === this.selected));
-      button.title = `${controlName(id)} · ${this.bindingLabel(binding)}`;
+      button.title = `${controlName(id)} · ${this.controlSummary(id)}`;
       button.setAttribute('aria-label', `選取 ${button.title}`);
       if (PAD_IDS.includes(id as `PAD_${number}`)) {
         const light = this.currentMode().pads[Number(id.slice(4)) - 1];
@@ -483,10 +812,23 @@ export class TranslatorUI {
     }
     if (event.kind === 'button') {
       document.querySelectorAll<HTMLElement>('[data-control]').forEach(b => { if (b.dataset.control === event.controlId) b.classList.toggle('is-pressed', event.pressed); });
+      if (isLitButton(event.controlId)) {
+        if (event.pressed) this.pressedButtons.add(event.controlId);
+        else this.pressedButtons.delete(event.controlId);
+        this.queueModeLights();
+      }
+    }
+    if (event.kind === 'strip') {
+      this.stripRaw = Math.max(0, Math.min(200, event.raw));
+      this.queueModeLights();
     }
     const result = this.engine.process(event); this.dispatch(result.messages);
     if (result.modeChanged) { this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.queueModeLights(); }
     this.renderPressed();
+    if (event.kind === 'button' && event.pressed)
+      this.selectHardwareControl(event.controlId === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : event.controlId);
+    else if (event.kind === 'encoder' && event.delta !== 0) this.selectHardwareControl('ENCODER_ROTATE');
+    else if (event.kind === 'strip' && event.raw > 0) this.selectHardwareControl('SMART_STRIP');
     if (event.kind !== 'pad' || event.event !== 'aftertouch' || this.el<HTMLInputElement>('pressure-events').checked) this.addEvent(JSON.stringify(event));
   }
   private addEvent(text: string): void {
@@ -497,15 +839,48 @@ export class TranslatorUI {
     });
   }
   private renderPressed(): void {
-    document.querySelectorAll<HTMLElement>('[data-control^="PAD_"]').forEach(b => { if (PAD_IDS.includes(b.dataset.control as `PAD_${number}`)) b.classList.toggle('is-pressed', this.activePads.has(b.dataset.control!)); });
+    document.querySelectorAll<HTMLButtonElement>('[data-control^="PAD_"]').forEach(button => {
+      const id = button.dataset.control as `PAD_${number}`;
+      if (!PAD_IDS.includes(id)) return;
+      const pressed = this.activePads.has(id);
+      button.classList.toggle('is-pressed', pressed);
+      const light = this.currentMode().pads[Number(id.slice(4)) - 1];
+      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness ?? 'bright' } : light);
+    });
   }
   private queueModeLights(): void {
+    const mode = this.currentMode();
+    const buttons = Object.fromEntries(BUTTON_IDS.slice(0, 39)
+      .filter(id => { const binding = mode.bindings[id]; return binding && binding.type !== 'none'; })
+      .map(id => [id, mode.buttonLight ?? { off: 'off', on: 'normal' }])) as NonNullable<Parameters<typeof encodeLights>[0]['buttons']>;
+    const report = encodeLights({ pads: mode.pads, pressedPads: this.activePads, padOnBrightness: mode.padOnBrightness,
+      buttons, pressedButtons: this.pressedButtons,
+      strip: { raw: this.stripRaw, mode: mode.stripLight?.mode ?? 'dot', brightness: mode.stripLight?.brightness ?? 'normal',
+        color: mode.stripLight?.color } });
+    this.renderLightPreview(report);
     if (!this.ledEnabled) return;
-    this.queueLights(this.currentMode().pads.map((pad, i) => this.activePads.has(PAD_IDS[i]) && pad.color !== 0 ? { ...pad, brightness: 'bright' } : pad));
+    this.queueReport(report);
+  }
+  private renderLightPreview(report: OutputReport): void {
+    const stripLight = this.currentMode().stripLight;
+    this.el('hardware').querySelectorAll<HTMLElement>('.strip-light').forEach((dot, index) => {
+      dot.classList.toggle('is-lit', report.data[55 + index] !== 0);
+      dot.dataset.brightness = stripLight?.brightness ?? 'normal';
+      dot.style.setProperty('--strip-led-color', PAD_PREVIEW[stripLight?.color ?? 17]);
+    });
+    for (let index = 0; index < 39; index++) {
+      const button = this.el('hardware').querySelector<HTMLElement>(`[data-control="${BUTTON_IDS[index]}"]`);
+      if (!button) continue;
+      button.classList.toggle('has-button-light', report.data[index] !== 0);
+      button.dataset.lightBrightness = report.data[index] === 0x7f ? 'bright' : report.data[index] === 0x7c ? 'dim' : 'normal';
+    }
   }
   private queueLights(pads: PadLight[]): void {
+    this.queueReport(encodePadLights(pads));
+  }
+  private queueReport(report: OutputReport): void {
     if (!this.hid.device?.opened) return;
-    this.pendingLed = encodePadLights(pads);
+    this.pendingLed = report;
     if (!this.writingLed) void this.pumpLights();
   }
   private async pumpLights(): Promise<void> {
@@ -514,7 +889,7 @@ export class TranslatorUI {
       const report = this.pendingLed, generation = this.ledGeneration; this.pendingLed = null;
       try {
         await this.hid.send(report);
-        if (generation === this.ledGeneration) this.el('led-status').textContent = '已送出 0x80 / 80 bytes。請確認實體燈光；此狀態不代表裝置已回報顯示成功。';
+        if (generation === this.ledGeneration) this.el('led-status').textContent = '已送出 0x80 / 80 bytes。請確認實體燈光。';
       } catch (error) {
         if (generation === this.ledGeneration) {
           this.ledEnabled = false; this.pendingLed = null; this.renderDevice();
@@ -531,25 +906,26 @@ export class TranslatorUI {
     this.el<HTMLInputElement>('led-enable').disabled = !connected || !supported;
     this.el<HTMLInputElement>('led-enable').checked = this.ledEnabled;
     this.el('led-summary').textContent = this.ledEnabled ? '已接管' : '尚未接管';
-    for (const id of ['led-test', 'led-restore', 'led-off']) this.el<HTMLButtonElement>(id).disabled = !connected || !this.ledEnabled;
     if (!connected) this.el('led-status').textContent = '連線時不會自動發送 LED 或螢幕封包。';
     else if (!supported) this.el('led-status').textContent = '此 HID 介面未宣告 0x80 輸出，無法接管 LED。';
-    else if (!this.ledEnabled) this.el('led-status').textContent = '裝置已就緒。啟用接管後才能控制 Pad 燈光。';
+    else if (!this.ledEnabled) this.el('led-status').textContent = '裝置已就緒。啟用接管後才能控制 Pad、按鍵與 Strip 燈光。';
   }
   async connect(): Promise<HIDDevice | null> {
     this.decoder.reset(); this.release();
     const device = await this.hid.connect(); this.renderDevice(); return device;
   }
   async disconnect(): Promise<void> {
-    this.release(); this.ledGeneration++; this.pendingLed = null;
-    if (this.ledEnabled) {
-      // Full-state all-off is the only known reset; the previous owner's state is unknown.
-      await this.hid.send(encodePadLights(PAD_IDS.map(() => ({ color: 0, brightness: 'off' })))).catch(error => this.options.toast(String(error)));
-    }
-    this.ledEnabled = false; await this.hid.disconnect(); this.renderDevice();
+    const reset = this.ledEnabled
+      ? { reportId: 0x80, data: new Uint8Array(80) } : undefined;
+    // Disable producers before release(), which normally queues idle mode lights.
+    this.ledEnabled = false; this.ledGeneration++; this.pendingLed = null;
+    this.release();
+    try { await this.hid.disconnect(reset); }
+    finally { this.renderDevice(); }
   }
+
   private release(): void {
-    this.dispatch(this.engine.reset()); this.decoder.reset(); this.activePads.clear(); this.renderPressed();
+    this.dispatch(this.engine.reset()); this.decoder.reset(); this.activePads.clear(); this.pressedButtons.clear(); this.stripRaw = 0; this.renderPressed();
     document.querySelectorAll('[data-control]').forEach(b => b.classList.remove('is-pressed'));
     this.queueModeLights();
   }

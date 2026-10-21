@@ -74,3 +74,33 @@ test('MIDI send errors clear endpoint once and discard engine state through call
   assert.throws(() => midi.send([[0x90, 36, 100]]), /gone/);
   assert.equal(lost, 1); assert.equal(midi.output, null);
 });
+
+test('shutdown cancels queued lights, serializes all-off after in-flight output, and shares close', async () => {
+  const { api, device } = hidFixture();
+  let finish!: () => void; const sent: number[][] = []; let closes = 0;
+  device.close = async () => { closes++; device.opened = false; };
+  device.sendReport = async (_id: number, bytes: Uint8Array) => {
+    sent.push(Array.from(bytes));
+    if (sent.length === 1) await new Promise<void>(r => { finish = r; });
+  };
+  const hid = new WebHidAdapter(() => {}, () => {}, api); await hid.connect();
+  const first = hid.send({ reportId: 0x80, data: new Uint8Array(80).fill(1) });
+  await new Promise(r => setImmediate(r));
+  const stale = assert.rejects(hid.send({ reportId: 0x80, data: new Uint8Array(80).fill(2) }), /取消舊輸出/);
+  const closing = hid.disconnect({ reportId: 0x80, data: new Uint8Array(80) });
+  assert.equal(hid.disconnect(), closing);
+  await assert.rejects(hid.send({ reportId: 0x80, data: new Uint8Array(80).fill(3) }), /正在關閉/);
+  assert.equal(closes, 0);
+  finish(); await first; await stale; await closing;
+  assert.deepEqual(sent, [Array(80).fill(1), Array(80).fill(0)]);
+  assert.equal(closes, 1);
+});
+
+test('shutdown attempts close even when all-off fails and can reconnect afterwards', async () => {
+  const { api, device } = hidFixture();
+  device.sendReport = async () => { throw new Error('write failed'); };
+  const hid = new WebHidAdapter(() => {}, () => {}, api); await hid.connect();
+  await assert.rejects(hid.disconnect({ reportId: 0x80, data: new Uint8Array(80) }), /write failed/);
+  assert.equal(device.opened, false); assert.equal(hid.device, null);
+  await hid.connect(); assert.equal(hid.device, device);
+});

@@ -238,6 +238,9 @@
   background: #666660;
   box-shadow: 0 0 2px #a9a99b33;
 }
+.strip-light.is-lit { background: var(--strip-led-color, #dce6b7); box-shadow: 0 0 5px var(--strip-led-color, #dce6b7); }
+.strip-light.is-lit[data-brightness=dim] { opacity: .55; }
+.strip-light.is-lit[data-brightness=bright] { box-shadow: 0 0 8px var(--strip-led-color, #e9f5bc); }
 
 .performance-zone .strip {
   display: block;

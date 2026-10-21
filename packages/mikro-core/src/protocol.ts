@@ -12,9 +12,9 @@ export const BUTTON_IDS = [
 ] as const;
 export type ButtonId = typeof BUTTON_IDS[number];
 export type PadId = `PAD_${number}`;
-export type ControlId = ButtonId | PadId | 'ENCODER_ROTATE' | 'SMART_STRIP';
+export type ControlId = ButtonId | PadId | 'ENCODER_ROTATE' | 'SMART_STRIP' | 'SMART_STRIP_TOUCH';
 export const PAD_IDS = Array.from({ length: 16 }, (_, i) => `PAD_${i + 1}` as PadId);
-export const CONTROL_IDS: readonly ControlId[] = [...BUTTON_IDS, 'ENCODER_ROTATE', 'SMART_STRIP', ...PAD_IDS];
+export const CONTROL_IDS: readonly ControlId[] = [...BUTTON_IDS, 'ENCODER_ROTATE', 'SMART_STRIP', 'SMART_STRIP_TOUCH', ...PAD_IDS];
 export function padIndexToNumber(index: number): number {
   return (3 - Math.floor(index / 4)) * 4 + index % 4 + 1;
 }
@@ -26,7 +26,7 @@ const PAD_EVENTS: Record<number, PadEventName> = {
   0x00: 'press-on', 0x10: 'note-on', 0x20: 'press-off', 0x30: 'note-off', 0x40: 'aftertouch'
 };
 export type InputEvent =
-  | { kind: 'button'; controlId: ButtonId; pressed: boolean }
+  | { kind: 'button'; controlId: ButtonId | 'SMART_STRIP_TOUCH'; pressed: boolean }
   | { kind: 'encoder'; controlId: 'ENCODER_ROTATE'; raw: number; delta: number }
   | { kind: 'strip'; controlId: 'SMART_STRIP'; raw: number }
   | { kind: 'pad'; controlId: PadId; padIndex: number; event: PadEventName; raw: number; velocity: number };
@@ -54,7 +54,9 @@ export class InputDecoder {
       // Rust only exposes the raw byte. Preserve subtraction without assuming a counter modulus.
       if (this.encoder !== undefined && next !== this.encoder) result.events.push({ kind: 'encoder', controlId: 'ENCODER_ROTATE', raw: next, delta: next - this.encoder });
       this.encoder = next;
+      if ((this.strip ?? 0) === 0 && raw[9] > 0) result.events.push({ kind: 'button', controlId: 'SMART_STRIP_TOUCH', pressed: true });
       if (raw[9] !== this.strip) result.events.push({ kind: 'strip', controlId: 'SMART_STRIP', raw: raw[9] });
+      if ((this.strip ?? 0) > 0 && raw[9] === 0) result.events.push({ kind: 'button', controlId: 'SMART_STRIP_TOUCH', pressed: false });
       this.strip = raw[9];
     } else if (reportId === 2) {
       if (!raw.length || raw.length % 3) result.diagnostics.push('Incomplete 0x02 pad triplet');
@@ -76,16 +78,57 @@ export class InputDecoder {
 
 export const PAD_COLORS = ['Off', 'Red', 'Orange', 'LightOrange', 'WarmYellow', 'Yellow', 'Lime', 'Green', 'Mint', 'Cyan', 'Turquoise', 'Blue', 'Plum', 'Violet', 'Purple', 'Magenta', 'Fuchsia', 'White'] as const;
 export type Brightness = 'off' | 'dim' | 'normal' | 'bright';
-export interface PadLight { color: number; brightness: Brightness }
+export interface PadLight { color: number; brightness: Brightness; onColor?: number }
 export const BRIGHTNESS = { off: 0, dim: 0x7c, normal: 0x7e, bright: 0x7f } as const;
 export interface OutputReport { reportId: number; data: Uint8Array }
-/** All 80 LED slots are sent together; unspecified button/strip slots are off. */
-export function encodePadLights(pads: readonly PadLight[]): OutputReport {
+export type ButtonLightId = typeof BUTTON_IDS[number];
+export type StripLightMode = 'dot' | 'bar' | 'pan';
+export interface LightState {
+  pads: readonly PadLight[];
+  pressedPads?: ReadonlySet<string>;
+  padOnBrightness?: Brightness;
+  buttons?: Partial<Record<ButtonLightId, { off: Brightness; on: Brightness }>>;
+  pressedButtons?: ReadonlySet<string>;
+  strip?: { raw: number; mode: StripLightMode; brightness: Brightness; color?: number };
+}
+/** Report 0x80 always replaces all 80 LED slots. */
+export function encodeLights(state: LightState): OutputReport {
+  const { pads } = state;
   if (pads.length !== 16) throw new Error('Expected 16 pad lights in physical Pad 1–16 order');
   const data = new Uint8Array(80);
   pads.forEach((pad, i) => {
-    if (!Number.isInteger(pad.color) || pad.color < 0 || pad.color > 17 || !Object.hasOwn(BRIGHTNESS, pad.brightness)) throw new Error('Invalid pad light');
-    data[39 + padNumberToIndex(i + 1)] = pad.brightness === 'off' || pad.color === 0 ? 0 : (pad.color << 2) + (BRIGHTNESS[pad.brightness] & 3);
+    const pressed = state.pressedPads?.has(PAD_IDS[i]) ?? false;
+    const color = pressed ? pad.onColor ?? pad.color : pad.color;
+    const brightness = pressed ? state.padOnBrightness ?? 'bright' : pad.brightness;
+    if (!Number.isInteger(pad.color) || pad.color < 0 || pad.color > 17 ||
+      pad.onColor !== undefined && (!Number.isInteger(pad.onColor) || pad.onColor < 0 || pad.onColor > 17) ||
+      !Object.hasOwn(BRIGHTNESS, pad.brightness) ||
+      state.padOnBrightness !== undefined && !Object.hasOwn(BRIGHTNESS, state.padOnBrightness)) throw new Error('Invalid pad light');
+    data[39 + padNumberToIndex(i + 1)] = brightness === 'off' || color === 0 ? 0 : (color << 2) + (BRIGHTNESS[brightness] & 3);
   });
+  for (let i = 0; i < 39; i++) {
+    const id = BUTTON_IDS[i];
+    const light = state.buttons?.[id];
+    if (!light) continue;
+    if (!Object.hasOwn(BRIGHTNESS, light.off) || !Object.hasOwn(BRIGHTNESS, light.on)) throw new Error('Invalid button light');
+    data[i] = BRIGHTNESS[state.pressedButtons?.has(id) ? light.on : light.off];
+  }
+  if (state.strip) {
+    const { raw, mode, brightness, color } = state.strip;
+    if (!Number.isInteger(raw) || raw < 0 || raw > 200 || !['dot', 'bar', 'pan'].includes(mode) || !Object.hasOwn(BRIGHTNESS, brightness) ||
+      color !== undefined && (!Number.isInteger(color) || color < 0 || color > 17)) throw new Error('Invalid strip light');
+    if (raw > 0 && brightness !== 'off') {
+      const index = Math.round((raw - 1) * 24 / 199);
+      const start = mode === 'dot' ? index : mode === 'pan' ? Math.min(index, 12) : 0;
+      const end = mode === 'dot' ? index : mode === 'pan' ? Math.max(index, 12) : index;
+      // Profiles without a Strip color use White (palette index 17).
+      const selectedColor = color ?? 17;
+      const value = selectedColor === 0 ? 0 :
+        (selectedColor << 2) + ({ dim: 1, normal: 2, bright: 3 } as const)[brightness];
+      for (let i = start; i <= end; i++) data[55 + i] = value;
+    }
+  }
   return { reportId: 0x80, data };
 }
+/** Backward-compatible Pad-only report; button and strip slots stay off. */
+export function encodePadLights(pads: readonly PadLight[]): OutputReport { return encodeLights({ pads }); }

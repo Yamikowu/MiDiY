@@ -114,7 +114,6 @@ function renderReportRows() {
 function startCapture() {
   if (!device?.opened || activeCapture) return;
   activeCapture = { id: crypto.randomUUID(), controlId: selected, startedAt: new Date().toISOString(), endedAt: null, note: '', baseline: Object.fromEntries([...lastByReport.entries()]), samples: [] };
-  $('capture-note').value = '';
   $('capture-result').className = 'result active';
   $('capture-result').textContent = '正在記錄。請依照提示操作實體控制器，完成後按「停止並分析」。';
   updateUI();
@@ -128,6 +127,7 @@ function stopCapture() {
   session.captures.push(activeCapture);
   const finished = activeCapture;
   activeCapture = null;
+  $('capture-note').value = '';
   renderCaptureResult(finished);
   updateUI();
   toast(finished.samples.length ? `已保存 ${finished.samples.length} 筆報告。` : '擷取期間沒有收到 Input Report；可重新操作再試。');
@@ -138,7 +138,7 @@ function renderCaptureResult(capture) {
   if (!capture) { element.className = 'result empty'; element.textContent = '連接裝置並完成一筆擷取後，這裡會顯示候選報告 ID 與位元組偏移。'; return; }
   const candidates = capture.candidates || summarizeCapture(capture);
   element.className = 'result';
-  element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : '<p>沒有觀察到位元組變化。</p>'}`;
+  element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${capture.note ? `<p>操作備註：${escapeHtml(capture.note)}</p>` : ''}${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : '<p>沒有觀察到位元組變化。</p>'}`;
 }
 
 function renderCaptureList() {

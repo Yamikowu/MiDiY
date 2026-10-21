@@ -22,10 +22,10 @@ npm start
 
 ## 工作區
 
-- **Mapping**（`/#mapping`）：以控制器參照圖選取並編輯 MIDI 與 Pad LED。頂部集中管理設定檔及 MIDI 輸出；右側編輯目前選取的控制項，圖上顯示已映射狀態、Channel／Note 與待機燈色。
+- **Mapping**（`/#mapping`）：以控制器參照圖選取並編輯 MIDI 與 Pad／按鍵／Strip LED。頂部集中管理設定檔及 MIDI 輸出；右側編輯目前選取的控制項，圖上顯示已映射狀態、Channel／Note 與燈光預覽。
 - **Testing**（`/#testing`）：控制器參照圖、逐項擷取、即時解碼、原始封包、Session 與候選 CSV 匯出。
 
-兩頁各自保留選取狀態；切換頁面不會重新連線、丟失表單草稿或中止擷取。已啟用的 MIDI 與燈光控制會持續運作。
+兩頁各自保留選取狀態；在 Mapping 頁按下實體一般按鍵、轉動 Encoder 或觸碰 Strip，會直接選取對應控制項，以白色外框標示並顯示其設定。切換頁面不會重新連線、丟失表單草稿或中止擷取。已啟用的 MIDI 與燈光控制會持續運作。
 Testing 的 Session 與 Mapping 的設定檔仍使用各自的格式和匯入／匯出按鈕。
 
 ## MIDI 演奏與設定
@@ -36,15 +36,27 @@ Testing 的 Session 與 Mapping 的設定檔仍使用各自的格式和匯入／
 4. 在 Mapping 點控制器參照圖，選 Note、CC、Program Change、切換模式或停用，按「套用至目前模式」；此時更新目前模式的控制項，並自動儲存整份設定檔。
 5. 頂部兩列分別選擇設定檔與模式。按「編輯」後，下拉選單變成名稱輸入欄，按鈕改為「儲存／刪除」；按「複製」會建立獨立副本並進入命名狀態。按 Escape 可放棄尚未儲存的名稱。
 6. 模式列的「設為啟動模式」決定下次載入此設定檔時選用的模式。匯出下載可攜的 JSON；匯入後會儲存為本機的新設定檔。
+7. 「裝置燈光」旁的「Pad 力度曲線」提供 Soft 3／2／1、Linear、Hard 1／2／3；切換後立即套用並儲存至整份 Profile，包含 JSON 匯入／匯出。舊設定檔預設 Linear。只調整使用 Pad 力度的 Hit Note On，Press 不受影響。這些是軟體曲線，未校準為 NI 原廠曲線。
+8. Pad Hit 的 Note 可設定輸出最小值／最大值（0–127，預設 0／127），先套用曲線再換算至此範圍；最小值不可大於最大值，相同值代表固定力度。有效 Note On 至少為 1，避免力度 0 被當成 Note Off。舊 Pad 固定力度保留，編輯時顯示為相同的最小值／最大值。一般按鍵與 Strip Touch 的 Note 不顯示力度欄位，載入及輸出統一使用 127。Note 摘要一律顯示 Gate／Toggle。
 
 Pad 色彩與亮度選取後會立即在參照圖預覽；這只改網頁外觀，不會寫入裝置或儲存。控制項表單的變更只有按「套用至目前模式」後才保存；已接管燈光時，也會更新裝置。切換控制項前會提示未套用的表單。匯出會驗證並套用目前控制項尚未套用的表單。
 舊版瀏覽器中單份 `mpa-profile-v1` 設定會自動讀入；命名清單使用獨立的
 `mpa-profile-library-v1` 儲存，不會寫入可攜 JSON，也不會修改原始 Session。
 
-Pad、實體按鍵和 Encoder push/touch 可設定離散動作。Encoder 可將原始差值轉成 CC 增減；
-計數回繞範圍預設 0（不推測），可依實機觀察設定。Strip 可將可調原值範圍映射到 CC 0–127；
-預設 1–200，原值 0 依 Rust 行為不送 CC。此範圍仍需依實機端點校準，不代表已定義觸碰手勢。
-Aftertouch 會解碼及錄製，首版不轉送成 MIDI；即時事件預設隱藏壓力連續值以方便閱讀，可勾選顯示。
+16 個 Pad 的 Hit 可選 Note、CC、Poly Pressure、Channel Pressure、Program Change 或 Pitchbend。Note 有 Gate／Toggle；
+其餘五種提供 Gate／Toggle／Trigger／Inc。Pad Hit 沒有 Action on，Press 的壓力映射獨立設定。
+一般實體按鍵與 Encoder push/touch 沒有 Hit／Press 分頁；Toggle／Trigger／Inc 可選按下或放開時送出，
+Inc 可設定範圍、Step、Wrap。Start／Stop／Continue、Song Position 與 MCU Button 暫不提供於一般按鍵選單。
+Encoder 旋轉可將原始差值轉成 CC 增減，
+計數回繞範圍預設 0（不推測）。Strip 位置原值 1–200 可映射到 CC、Poly Pressure、Channel Pressure、
+Program Change 或 Pitchbend；0 代表放開。Touch 由 0 與非零位置的轉換產生，可獨立設定 Note、CC、
+Pressure、Program Change、Pitchbend、Start／Stop／Continue 或 Song Position。這些 MIDI 輸出仍需實機接收端驗證。
+Strip Position 的 CC 可選 Absolute（自訂 From／To 範圍）、Relative（每步送 1／127）或 Relative (Offset)（每步送 65／63）。
+相對模式可調 Step 與 Resolution（全長預計步數，越大越靈敏）；滑動開始的第一個位置只建立基線，放開後重新建立。
+Pad 的 Hit（敲擊）與 Press（持續施壓）可分別設定。Press 可選停用、Note（含觸發／放開門檻）、
+CC、Poly Pressure、Channel Pressure 或 Pitchbend；12-bit 原始壓力映射到設定的輸出範圍。
+舊設定檔沒有 Press 欄位時保持停用。壓力值仍會解碼及錄製；即時事件預設隱藏連續值，可勾選顯示。
+目前按壓輸出依軟體映射，壓力門檻與力度曲線尚待實機校準，亦未宣稱與 NI Controller Editor 完全一致。
 
 切換模式、套用設定、切換 MIDI 埠與 HID 斷線都會釋放相關音符／按住的 CC。
 「Panic」可主動釋放目前狀態。實體 MIDI 埠突然消失時，最後的 Note Off 可能無法送達；
@@ -65,13 +77,13 @@ Koala Pad 需用 Note；其他控制項可依 App 支援映射 CC。
 本次已透過 IAC 實測收到 Note 36 與 CC119（按下 127、放開 0），見[實測紀錄](docs/verification/README.md)。
 MPA 不會建立虛擬 MIDI 埠，也不會自動改動 App 的 MIDI map。
 
-## Pad LED
+## Pad、按鍵與 Strip LED
 
 首次連線不發送任何輸出。在 Mapping 參照圖下展開「裝置燈光」，勾「接管 LED 輸出」後才送 `0x80`、80-byte 完整燈光狀態。
-每個模式可設定 16 顆 Pad 的色盤與待機亮度，按下時提高亮度。
-「測試選取 Pad」只點亮選取 Pad；「套用模式燈光」回到模式配置；「關閉全部燈光」送全零並停用接管。
+每個模式可設定 16 顆 Pad 的 Single／Dual 色盤與個別待機亮度；「裝置燈光」統一設定 16 顆 Pad 的按下亮度，以及有映射的一般按鍵共用的待機／按下亮度。未映射的一般按鍵保持熄滅，預覽只讓按鍵文字發光。Strip 可設定 Dot（單點）、Bar（由左累積）或 Pan（中央往觸碰位置延伸）、色盤與亮度。Strip 原值 1–200 對應左到右，0 為離開並熄燈。
+關閉「接管 LED 輸出」會送出全零燈光狀態並停用接管。
 
-硬體使用 Off + 17 種列舉色，非任意 RGB。完整報告也包含按鍵／Strip 燈；首版將這些槽位清零。
+Pad 與 Strip 可使用 Off + 17 種列舉色，非任意 RGB；按鍵使用亮度值。Strip 預設為 White；舊設定檔若未指定 Strip 顏色，也會以 White 色盤編碼輸出。燈光跟隨本機操作（Controller Editor 的 For MIDI Out 行為）；外部 MIDI In 回饋尚未接入。
 程式無法讀回或還原之前其他軟體設定的燈光。主動中斷接管中的連線會送全關；拔線或重新整理可能留下
 裝置最後的燈光狀態。螢幕與組合鍵未實作；螢幕 `0xE0` 格式只記錄在協定文件與測試樣本。
 
@@ -101,4 +113,4 @@ Pad 透過 Logic Pro Virtual In 有聲音。
 Koala 經 IAC 收到 Channel 1 的 Note 36 與 CC119；接收端畫面顯示最後 CC 值為 0。
 
 仍待逐項確認：Logic CC 實際接收、各 Pad 其餘顏色與亮度、Encoder 回繞及
-Strip 兩端校準、實體斷線的接收端清音。自動測試不等同上述實機驗證。
+Strip 新增動作的實際接收、實體斷線的接收端清音。自動測試不等同上述實機驗證。

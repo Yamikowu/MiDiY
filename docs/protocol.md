@@ -29,28 +29,57 @@ Pad 13–16, then 4–7 to Pad 9–12, 8–11 to Pad 5–8, 12–15 to Pad 1–4
 All button bit names and stable IDs are exported as `BUTTON_IDS`.
 
 Rust only prints Encoder raw values; no modulus is established. MPA emits raw
-subtraction and lets profiles specify a modulus (0 means none). Rust ignores Strip
-zero and scales its other values with a formula using 200; MPA's CC default range
-1–200 is configurable and must be calibrated against the physical endpoints.
+subtraction and lets profiles specify a modulus (0 means none). For the Strip,
+the user-confirmed physical values are 0 on release, 1 at the left edge, and
+200 at the right edge. A stationary touch produced a nonzero position followed
+by zero on release in the 2026-10-20 capture. The decoder emits Touch down/up
+transitions alongside the raw Position event. Position MIDI output ignores zero;
+Touch MIDI output is configured independently. Profile CC endpoints remain
+configurable.
+
 Bytes 7–8 and 10–12, plus unused button bits, are preserved without semantic claims.
 
 ## LED output
 
 `sendReport(0x80, Uint8Array(80))`: ID is separate from data. Button slots 0–38,
-Pad device indices 0–15 at slots 39–54, Strip slots 55–79. v1 fills button/Strip
-slots with zero and supplies Pad settings in physical Pad 1–16 order.
+Pad device indices 0–15 at slots 39–54, Strip slots 55–79. Encoder Press/Touch
+are input bits 39/40, not light slots. The profile supplies Pad settings in
+physical Pad 1–16 order. Shared button off/on brightness, shared Pad pressed
+brightness and Strip mode/brightness are scoped to each mode. Older profiles
+without these fields use off/normal buttons, bright Pad presses and a
+normal-brightness Dot strip. Legacy per-button brightness entries remain
+importable but do not override the shared button setting.
 
 Pad value is zero for Off; otherwise `(color << 2) + (brightness & 3)`.
 Colors 1–17 follow Rust's `PadColors` enum (Red through White).
 Rust brightness constants: Off 0x00, Dim 0x7c, Normal 0x7e, Bright 0x7f.
 These are palette entries, not arbitrary 24-bit RGB.
+Pad Single uses one color at idle and pressed brightness; Dual can use a
+separate on color. Pad idle brightness is per Pad, while pressed brightness is
+shared across all 16 Pads. Button slots use the brightness byte directly. Strip
+slots can also encode a palette color using `(color << 2) + level`, with level
+1–3 for dim/normal/bright, as in pymikro. Profiles without a Strip color
+default to White (palette index 17). Strip raw 1–200 maps left to right across 25 LEDs; raw 0 means release
+and all Strip LEDs off. Dot illuminates one LED, Bar fills from the left, and
+Pan fills from the center toward the position. The browser currently follows
+local HID actions (Controller Editor's For MIDI Out behavior); external MIDI In
+feedback is not implemented.
 
 The browser adapter validates the selected interface's output descriptor and
 serializes writes. MPA coalesces pending light updates, only sends on state
 changes, and does not send on initial connection. Enabling LED takeover writes
 the entire state, so another application's light state cannot be preserved.
-Manual disconnect after takeover sends all-off; physical unplug cannot send a reset.
-Reloading/closing a page may leave the last LED state on the hardware.
+Manual disconnect and `pagehide` (reload/navigation/close) share an idempotent
+shutdown. With LED takeover active, shutdown disables light producers, discards
+pending UI updates, cancels queued adapter writes, waits for any in-flight write,
+then attempts one 0x80 report with all 80 payload bytes zero (Pads, buttons and
+Smart Strip) before closing. New writes are rejected while closing; repeated
+shutdown requests share the same operation. Without takeover, no reset is sent.
+Manual disconnect awaits completion; a failed reset still attempts to close.
+`pagehide` starts this sequence but the browser does not await it. Suspension,
+termination, a stalled write, HID errors, or physical unplug can prevent reset;
+reload/close therefore cannot guarantee dark LEDs. A resolved send is not a
+hardware acknowledgement of the visible state.
 
 ## Screen reference (not implemented in v1)
 
