@@ -111,3 +111,55 @@ test('general button Note velocity is 127 for Gate and Toggle, preserving Action
     }
   }
 });
+
+test('FIXED VEL toggles Pad Hit Note velocity, overrides ranges and curves, and restores each binding', () => {
+  const profile = createDefaultProfile();
+  profile.padVelocityCurve = 'soft-3';
+  profile.modes[0].bindings.FIXED_VEL = { type: 'fixed-velocity', velocity: 91 };
+  profile.modes[0].bindings.PAD_1 = { type: 'note', channel: 1, note: 36, velocity: 'pad', velocityMin: 10, velocityMax: 30 };
+  profile.modes[0].bindings.PAD_2 = { type: 'note', channel: 1, note: 37, velocity: 53, mode: 'toggle' };
+  const engine = new MappingEngine(profile);
+  const down: InputEvent = { kind: 'button', controlId: 'FIXED_VEL', pressed: true };
+  const up: InputEvent = { ...down, pressed: false };
+  const normal = engine.process(hit(40)).messages[0][2]; engine.process(release);
+  assert.ok(normal >= 10 && normal <= 30);
+  assert.deepEqual(engine.process(down).messages, []);
+  engine.process(down); // repeated down does not disable
+  engine.process(up); assert.equal(engine.isButtonLightOn('FIXED_VEL'), true);
+  assert.equal(engine.process(hit(1)).messages[0][2], 91);
+  assert.deepEqual(engine.process(release).messages, [[0x80, 36, 0]]);
+  const hit2: InputEvent = { ...hit(20), controlId: 'PAD_2', padIndex: 13 };
+  assert.equal(engine.process(hit2).messages[0][2], 91);
+  engine.process({ ...hit2, event: 'note-off' });
+  engine.process(hit2); engine.process({ ...hit2, event: 'note-off' });
+  engine.process(down); engine.process(up);
+  assert.equal(engine.isButtonLightOn('FIXED_VEL'), false);
+  assert.equal(engine.process(hit(40)).messages[0][2], normal); engine.process(release);
+  assert.equal(engine.process(hit2).messages[0][2], 53);
+});
+
+test('fixed velocity validates only on FIXED_VEL, survives serialization and resets with lifecycle', () => {
+  const profile = createDefaultProfile();
+  profile.modes[0].bindings.FIXED_VEL = { type: 'fixed-velocity', velocity: 1 };
+  const restored = parseProfile(JSON.parse(JSON.stringify(profile)));
+  assert.deepEqual(restored.modes[0].bindings.FIXED_VEL, { type: 'fixed-velocity', velocity: 1 });
+  for (const velocity of [0, 128, 1.5, NaN]) {
+    const invalid = structuredClone(profile);
+    invalid.modes[0].bindings.FIXED_VEL = { type: 'fixed-velocity', velocity };
+    assert.throws(() => parseProfile(invalid));
+  }
+  const invalid = structuredClone(profile);
+  invalid.modes[0].bindings.PAD_1 = { type: 'fixed-velocity', velocity: 100 };
+  assert.throws(() => parseProfile(invalid));
+  const second = structuredClone(profile.modes[0]); second.id = 'second'; profile.modes.push(second);
+  for (const reset of ['flush', 'reset', 'reconfigure', 'mode'] as const) {
+    const engine = new MappingEngine(profile);
+    engine.process({ kind: 'button', controlId: 'FIXED_VEL', pressed: true });
+    engine.process({ kind: 'button', controlId: 'FIXED_VEL', pressed: false });
+    assert.equal(engine.isButtonLightOn('FIXED_VEL'), true);
+    if (reset === 'reconfigure') engine.reconfigure(profile);
+    else if (reset === 'mode') engine.switchMode('second');
+    else engine[reset]();
+    assert.equal(engine.isButtonLightOn('FIXED_VEL'), false);
+  }
+});

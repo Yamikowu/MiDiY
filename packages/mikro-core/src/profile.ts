@@ -2,6 +2,7 @@ import { BUTTON_IDS, CONTROL_IDS, PAD_IDS, type Brightness, type ButtonLightId, 
 export type MidiChannel = number; // Human-facing 1–16 throughout profiles.
 export type Binding =
   | { type: 'none' }
+  | { type: 'fixed-velocity'; velocity: number }
   | { type: 'note'; channel: MidiChannel; note: number; velocity: number | 'pad'; velocityMin?: number; velocityMax?: number; mode?: 'gate' | 'toggle'; actionOn?: 'down' | 'up' }
   | { type: 'cc'; channel: MidiChannel; controller: number; style: 'momentary'; on: number; off: number; actionOn?: never }
   | { type: 'cc'; channel: MidiChannel; controller: number; style: 'toggle'; on: number; off: number; actionOn?: 'down' | 'up' }
@@ -33,7 +34,9 @@ export interface Mode {
   id: string; name: string; bindings: Partial<Record<ControlId, Binding>>; pads: PadLight[];
   pressureBindings?: Partial<Record<`PAD_${number}`, PressureBinding>>;
   padOnBrightness?: Brightness;
+  padOffBrightness?: Brightness;
   buttonLight?: { off: Brightness; on: Brightness };
+  toggleButtonLight?: { off: Brightness; on: Brightness };
   /** Retained for older profile files; the current editor uses buttonLight for all buttons. */
   buttonLights?: Partial<Record<ButtonLightId, { off: Brightness; on: Brightness }>>;
   stripLight?: { mode: StripLightMode; brightness: Brightness; color?: number };
@@ -67,10 +70,13 @@ export function parseProfile(value: unknown): Profile {
         pad.onColor !== undefined && (!Number.isInteger(pad.onColor) || pad.onColor < 0 || pad.onColor > 17) ||
         !['off', 'dim', 'normal', 'bright'].includes(pad.brightness)) return fail();
     }
+    if (m.padOffBrightness !== undefined && !['off', 'dim', 'normal', 'bright'].includes(m.padOffBrightness)) return fail();
     if (m.padOnBrightness !== undefined && !['off', 'dim', 'normal', 'bright'].includes(m.padOnBrightness)) return fail();
-    if (m.buttonLight !== undefined && (!m.buttonLight ||
-      !['off', 'dim', 'normal', 'bright'].includes(m.buttonLight.off) ||
-      !['off', 'dim', 'normal', 'bright'].includes(m.buttonLight.on))) return fail();
+    for (const light of [m.buttonLight, m.toggleButtonLight]) {
+      if (light !== undefined && (!light ||
+        !['off', 'dim', 'normal', 'bright'].includes(light.off) ||
+        !['off', 'dim', 'normal', 'bright'].includes(light.on))) return fail();
+    }
     if (m.buttonLights !== undefined) {
       if (!m.buttonLights || typeof m.buttonLights !== 'object' || Array.isArray(m.buttonLights)) return fail();
       for (const [id, light] of Object.entries(m.buttonLights)) {
@@ -85,6 +91,10 @@ export function parseProfile(value: unknown): Profile {
       if (!CONTROL_IDS.includes(control as ControlId) || !b || typeof b !== 'object') return fail();
       const continuous = control === 'SMART_STRIP' || control === 'ENCODER_ROTATE';
       if (b.type === 'none') continue;
+      if (b.type === 'fixed-velocity') {
+        if (control !== 'FIXED_VEL' || !byte(b.velocity) || b.velocity < 1) return fail();
+        continue;
+      }
       if (b.type === 'mode') { if (continuous || !ids.includes(b.modeId)) return fail(); continue; }
       if (b.type === 'system') {
         if (control !== 'SMART_STRIP_TOUCH' || !['start', 'stop', 'continue', 'song-position'].includes(b.command)

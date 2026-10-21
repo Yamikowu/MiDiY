@@ -55,7 +55,7 @@ Colors 1–17 follow Rust's `PadColors` enum (Red through White).
 Rust brightness constants: Off 0x00, Dim 0x7c, Normal 0x7e, Bright 0x7f.
 These are palette entries, not arbitrary 24-bit RGB.
 Pad Single uses one color at idle and pressed brightness; Dual can use a
-separate on color. Pad idle brightness is per Pad, while pressed brightness is
+separate on color. Pad idle brightness uses the mode-level padOffBrightness when present (legacy per-Pad brightness otherwise), while pressed brightness is
 shared across all 16 Pads. Button slots use the brightness byte directly. Strip
 slots can also encode a palette color using `(color << 2) + level`, with level
 1–3 for dim/normal/bright, as in pymikro. Profiles without a Strip color

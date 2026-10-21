@@ -16,6 +16,7 @@ export function applyPadVelocityCurve(velocity: number, curve: PadVelocityCurve 
 export class MappingEngine {
   profile: Profile;
   activeModeId: string;
+  private fixedVelocityEnabled = false;
   private held = new Set<ControlId>();
   private notes = new Map<string, { channel: number; note: number }>();
   private releases = new Map<ControlId, MidiMessage>();
@@ -26,6 +27,17 @@ export class MappingEngine {
   private stripRemainder = new Map<string, number>();
   constructor(profile: Profile) { this.profile = parseProfile(profile); this.activeModeId = this.profile.initialModeId; }
   get mode(): Mode { return this.profile.modes.find(m => m.id === this.activeModeId)!; }
+  /** Local mapping state, independent of physical hold and external MIDI feedback. */
+  isButtonLightOn(id: ControlId): boolean {
+    const binding = this.mode.bindings[id];
+    if (binding?.type === 'fixed-velocity') return this.fixedVelocityEnabled;
+    if (binding?.type === 'note' && binding.mode === 'toggle') return this.notes.has(id);
+    if (binding?.type === 'cc' && binding.style === 'toggle' ||
+      binding?.type === 'button-value' && binding.mode === 'toggle') {
+      return this.values.get(`${this.activeModeId}:${id}`) === binding.on;
+    }
+    return this.held.has(id);
+  }
   reconfigure(profile: Profile): MidiMessage[] {
     const next = parseProfile(profile);
     const messages = this.flush();
@@ -36,6 +48,7 @@ export class MappingEngine {
     return messages;
   }
   flush(): MidiMessage[] {
+    this.fixedVelocityEnabled = false;
     const unique = new Map<string, MidiMessage>();
     for (const n of this.notes.values()) unique.set(`${n.channel}:${n.note}`, [0x80 + n.channel - 1, n.note, 0]);
     this.notes.clear();
@@ -103,6 +116,10 @@ export class MappingEngine {
     if (binding.type === 'mode') return down ? this.switchMode(binding.modeId) : result;
     if (binding.type === 'system') {
       if (down) result.messages.push(this.systemMessage(binding));
+      return result;
+    }
+    if (binding.type === 'fixed-velocity') {
+      if (down) this.fixedVelocityEnabled = !this.fixedVelocityEnabled;
       return result;
     }
     const ch = binding.channel - 1;
@@ -194,6 +211,8 @@ export class MappingEngine {
   }
   private noteVelocity(binding: Extract<Binding, { type: 'note' }>, event: InputEvent): number {
     if (event.kind !== 'pad') return 127;
+    const fixed = this.mode.bindings.FIXED_VEL;
+    if (this.fixedVelocityEnabled && fixed?.type === 'fixed-velocity') return fixed.velocity;
     if (binding.velocity !== 'pad') return binding.velocity;
     const curved = applyPadVelocityCurve(event.velocity, this.profile.padVelocityCurve);
     const min = binding.velocityMin ?? 0, max = binding.velocityMax ?? 127;

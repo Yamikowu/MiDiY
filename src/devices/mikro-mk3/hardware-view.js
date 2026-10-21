@@ -28,7 +28,7 @@ export function renderHardware(target, onSelect, { includeEncoderTouch = false }
     </div>`;
   target.addEventListener('click', event => {
     const button = event.target.closest('[data-control]');
-    if (button && target.contains(button)) onSelect(button.dataset.control);
+    if (button && target.contains(button)) onSelect(button.dataset.control, event);
   });
 }
 

@@ -1,5 +1,5 @@
 import { toIssue, type Issue } from './issues';
-import { MappingEngine, createDefaultProfile, parseProfile, type Profile, type InputEvent,
+import { MappingEngine, BUTTON_IDS, createDefaultProfile, parseProfile, type Profile, type InputEvent,
   type MidiMessage, type OutputReport, type PadVelocityCurve } from '@midiy/mikro-core';
 import type { ControllerInput, MidiOutput, DeviceInfo, MidiStatus, RawReport } from './contracts';
 import type { MikroDriver, PerformanceState } from '../devices/mikro-mk3/driver';
@@ -44,6 +44,7 @@ export class TranslatorRuntime {
     });
     output.bind(() => this.publish(), () => {
       const messages = this.engine.flush();
+      this.refreshLights();
       this.emit({ type: 'error', code: 'midi_output_lost', message: 'MIDI 輸出埠已離線；已清除演奏狀態，接收端若仍有聲音請使用其 Panic。' });
       return messages;
     });
@@ -66,7 +67,9 @@ export class TranslatorRuntime {
     return structuredClone({ device: this.input.info, midi: this.output.status,
       activeModeId: this.engine.activeModeId, activePads: [...this.performance.activePads],
       pressedButtons: [...this.performance.pressedButtons], ledEnabled: this.ledEnabled,
-      lightReport: this.driver.lights(mode, this.performance), ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount });
+      lightReport: this.driver.lights(mode, { ...this.performance,
+        litButtons: new Set(BUTTON_IDS.filter(id => this.engine.isButtonLightOn(id))) }),
+      ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount });
   }
   private publish() { this.emit({ type: 'state', state: this.snapshot }); }
   private dispatch(messages: MidiMessage[]) {
@@ -118,7 +121,7 @@ export class TranslatorRuntime {
     // This operation only updates feedback settings, preserving held MIDI ownership.
     for (const mode of this.profile.modes) {
       const source = next.modes.find(m => m.id === mode.id)!;
-      mode.buttonLight = source.buttonLight; mode.padOnBrightness = source.padOnBrightness;
+      mode.buttonLight = source.buttonLight; mode.toggleButtonLight = source.toggleButtonLight; mode.padOnBrightness = source.padOnBrightness; mode.padOffBrightness = source.padOffBrightness;
     }
     this.refreshLights(); this.publish();
   }
@@ -128,7 +131,8 @@ export class TranslatorRuntime {
   }
   enableMidi() { return this.output.enable(); }
   async selectOutput(id: string) {
-    await this.output.select(id, this.engine.flush()); this.publish();
+    const messages = this.engine.flush(); this.refreshLights();
+    await this.output.select(id, messages); this.publish();
   }
   connect(): Promise<DeviceInfo | null> {
     if (this.connecting) return this.connecting;

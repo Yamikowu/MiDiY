@@ -1,3 +1,4 @@
+import { mappingShortcut, EditHistory, selectControls, controlsInRect, commonActions, commonFields, patchControls, copyControls, pasteControls, isPadControl, type ControlCopy } from './editor-model';
 import { t, l, attribute, labelMarkup, labelAttributes, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import {
   PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
@@ -43,11 +44,17 @@ export class TranslatorUI {
   private editingProfile = false;
   private editingMode = false;
   private selected: ControlId = 'PAD_1';
+  private selection = new Set<ControlId>(['PAD_1']);
+  private batchChanges: Record<string, unknown> = {};
+  private pendingPaste: Profile | null = null;
+  private copied: ControlCopy[] = [];
+  private history: EditHistory;
   private hardwareSelectionPending = false;
+  private followHardwareSelection = false;
   private get activeModeId() { return this.runtime.activeModeId; }
   constructor(private readonly runtime: TranslatorRuntime, private readonly library: ProfileLibrary,
     private readonly options: TranslatorOptions) {
-    this.profile = library.current;
+    this.profile = library.current; this.history = new EditHistory(this.profile);
     this.mount();
     let midiStatus = '', deviceStatus = '';
     runtime.subscribe(event => {
@@ -56,13 +63,13 @@ export class TranslatorUI {
         const device = JSON.stringify([event.state.device, event.state.ledEnabled, event.state.ledStatus]);
         if (device !== deviceStatus) { deviceStatus = device; this.renderDevice(); }
         if (midi !== midiStatus) { midiStatus = midi; this.renderPorts(); }
-        this.renderPressed(); this.queueModeLights();
+        this.renderPressed(); this.queueModeLights(); this.previewBatch();
       } else if (event.type === 'decoded') this.handleEvent(event.event);
-      else if (event.type === 'mode') { this.renderModes(); this.renderBinding(); this.renderMap(); }
+      else if (event.type === 'mode') { this.pendingPaste = null; this.batchChanges = {}; this.bindingDirty = false; this.renderModes(); this.renderBinding(); this.renderMap(); }
     });
     onLocaleChange(() => {
       // Translate labels in place: never re-render forms or reset their dirty state.
-      this.el('selected').textContent = controlName(this.selected);
+      this.el('selected').textContent = this.selection.size === 1 ? controlName(this.selected) : t('selected_control_count', {p0: this.selection.size});
       this.el('draft-state').textContent = this.bindingDirty ? t('not_applied') : t('applied');
       this.el('hit-heading').textContent = isPad(this.selected) ? t('pad_hit_strike') : this.selected === 'SMART_STRIP' ? t('strip_position_position') : 'MIDI OUTPUT';
       this.el('binding-summary').textContent = this.controlSummary(this.selected);
@@ -89,10 +96,21 @@ export class TranslatorUI {
       </section>
       <div class="workspace mapping-workspace">
         <section class="panel mapping-device">
-          <div class="section-heading"><div><p class="eyebrow">HARDWARE</p><h2>${l('controller_reference', {})}</h2></div><span id="midi-mapped-count" class="section-note"></span></div>
+          <div class="section-heading mapping-controller-heading">
+            <div><p class="eyebrow">HARDWARE</p><h2>${l('controller_reference', {})}</h2></div>
+            <div class="map-footer mapping-legend"><span><i class="dot selected-dot"></i>${l('selected', {})}</span><span><i class="dot mapped-dot"></i>${l('mapped', {})}</span><span><i class="dot idle-dot"></i>${l('unmapped', {})}</span></div>
+            <span id="midi-mapped-count" class="section-note"></span>
+          </div>
           <div class="hardware-scroll"><div id="midi-hardware" class="hardware" ${attribute('aria-label', 'mapping_controller_reference', {})}></div></div>
-          <div class="map-footer"><span><i class="dot selected-dot"></i>${l('selected', {})}</span><span><i class="dot mapped-dot"></i>${l('mapped', {})}</span><span><i class="dot idle-dot"></i>${l('unmapped', {})}</span></div>
-          <p class="map-hint">${l('select_controls_on_the_reference_image_pads_show_channel_note_apply_cont', {})}</p>
+          <div class="mapping-footer-row">
+          <p class="map-hint" title="${html(t('selection_shortcuts_hint'))}">${l('selection_shortcuts_compact', {})}</p>
+          <div class="mapping-edit-actions" role="toolbar" ${attribute('aria-label', 'mapping_edit_actions', {})}>
+            <button id="midi-undo" type="button">${l('undo_edit', {})}</button><button id="midi-redo" type="button">${l('redo_edit', {})}</button>
+            <button id="midi-copy-controls" type="button">${l('copy_controls', {})}</button><button id="midi-paste-controls" type="button">${l('paste_controls', {})}</button>
+            <span id="midi-selection-count"></span>
+            <label class="switch hardware-follow-toggle" title="${html(t('follow_hardware_selection_help'))}"><input id="midi-follow-hardware-selection" type="checkbox">${l('follow_hardware_selection', {})}</label>
+          </div>
+          </div>
           <div class="device-settings">
           <details class="device-options" open><summary>${l('device_lights', {})}<span id="midi-led-summary">${l('not_controlled', {})}</span></summary>
             <div class="led-takeover-row">
@@ -103,6 +121,9 @@ export class TranslatorUI {
               <p class="editor-section-label">${l('shared_brightness_for_this_mode', {})}</p>
               <label>${l('button_idle_brightness', {})}<select id="midi-button-idle-brightness"></select></label>
               <label>${l('button_pressed_brightness', {})}<select id="midi-button-on-brightness"></select></label>
+              <label>${l('toggle_button_off_brightness', {})}<select id="midi-toggle-button-off-brightness"></select></label>
+              <label>${l('toggle_button_on_brightness', {})}<select id="midi-toggle-button-on-brightness"></select></label>
+              <label>${l('idle_brightness_for_all_16_pads', {})}<select id="midi-pad-off-brightness"></select></label>
               <label>${l('pressed_brightness_for_all_16_pads', {})}<select id="midi-pad-on-brightness"></select></label>
             </div>
             <p class="caption">${l('changes_save_immediately_to_this_mode_button_brightness_only_affects_map', {})}</p>
@@ -127,7 +148,11 @@ export class TranslatorUI {
         </aside>
       </div>
       <div class="mapping-status"><span id="midi-status" role="status">${l('no_midi_output_selected', {})}</span><span>${l('profiles_are_saved_in_this_browser_export_as_json', {})}</span></div>`;
-    renderHardware(this.el('hardware'), (id: string) => this.selectControl(id as ControlId), { includeEncoderTouch: true });
+    renderHardware(this.el('hardware'), (id: string, event: MouseEvent) => this.selectControl(id as ControlId, event.shiftKey), { includeEncoderTouch: true });
+    this.mountSelection();
+    this.el<HTMLInputElement>('follow-hardware-selection').addEventListener('change', () => {
+      this.followHardwareSelection = this.el<HTMLInputElement>('follow-hardware-selection').checked;
+    });
     this.el('binding-form').addEventListener('input', () => this.markBindingDirty());
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
     this.el('pad-light').addEventListener('input', () => this.previewPadLight());
@@ -196,6 +221,7 @@ export class TranslatorUI {
       if (event.key === 'Escape') { this.editingMode = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
     });
     this.el('action').addEventListener('change', () => {
+      if (this.selection.size !== 1 || this.pendingPaste) return;
       const lightDraft = this.readPadLightDraft();
       const stripDraft = this.readStripLightDraft();
       this.renderFields(undefined, lightDraft ?? undefined, stripDraft ?? undefined); this.markBindingDirty(); this.previewPadLight();
@@ -251,23 +277,196 @@ export class TranslatorUI {
       this.runtime.setLedEnabled(this.el<HTMLInputElement>('led-enable').checked);
       this.renderDevice();
     });
-    for (const id of ['button-idle-brightness', 'button-on-brightness', 'pad-on-brightness']) {
+    for (const id of ['button-idle-brightness', 'button-on-brightness', 'toggle-button-off-brightness', 'toggle-button-on-brightness', 'pad-off-brightness', 'pad-on-brightness']) {
       this.el<HTMLSelectElement>(id).addEventListener('change', () => this.saveLedSettings());
     }
     this.el<HTMLSelectElement>('pad-velocity-curve').addEventListener('change', () => this.saveVelocityCurve());
-    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.selectControl(this.selected); this.renderPorts(); this.renderDevice(); this.renderSaveState(); this.queueModeLights();
+    this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderPorts(); this.renderDevice(); this.renderSaveState(); this.queueModeLights();
+  }
+  private renderEditActions(): void {
+    this.el<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
+    this.el<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
+    this.el<HTMLButtonElement>('copy-controls').disabled = !this.selection.size;
+    this.el<HTMLButtonElement>('paste-controls').disabled = !this.selection.size || !this.copied.length;
+    this.el('selection-count').textContent = t('selected_control_count', {p0: this.selection.size});
+  }
+  private async selectGroup(ids: ControlId[]): Promise<void> {
+    if (ids.length === this.selection.size && ids.every(id => this.selection.has(id))) return;
+    if (!await this.discardBindingDraft()) return;
+    this.selection = new Set(ids); this.batchChanges = {}; this.pendingPaste = null;
+    this.selected = ids[0] ?? this.selected;
+    this.renderBinding(); this.renderMap();
+  }
+  private mountSelection(): void {
+    const hardware = this.el('hardware');
+    hardware.tabIndex = 0;
+    let drag: { pointer: number; start: { x: number; y: number }; shift: boolean; base: ControlId[]; moved: boolean } | null = null;
+    let box: HTMLDivElement | null = null, suppressClick = false;
+    hardware.addEventListener('click', event => {
+      if (suppressClick) { event.preventDefault(); event.stopImmediatePropagation(); suppressClick = false; }
+    }, true);
+    hardware.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.pointerType === 'touch') return;
+      suppressClick = false;
+      drag = { pointer: event.pointerId, start: { x: event.clientX, y: event.clientY }, shift: event.shiftKey, base: [...this.selection], moved: false };
+    });
+    hardware.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.pointer) return;
+      if (!drag.moved && Math.hypot(event.clientX - drag.start.x, event.clientY - drag.start.y) < 5) return;
+      drag.moved = true; event.preventDefault(); hardware.setPointerCapture(event.pointerId);
+      const bounds = hardware.getBoundingClientRect();
+      if (!box) { box = document.createElement('div'); box.className = 'mapping-marquee'; hardware.append(box); }
+      Object.assign(box.style, { left: `${Math.min(drag.start.x, event.clientX) - bounds.left}px`, top: `${Math.min(drag.start.y, event.clientY) - bounds.top}px`,
+        width: `${Math.abs(event.clientX - drag.start.x)}px`, height: `${Math.abs(event.clientY - drag.start.y)}px` });
+    });
+    hardware.addEventListener('pointerup', event => {
+      if (!drag || event.pointerId !== drag.pointer) return;
+      const current = drag; drag = null; box?.remove(); box = null;
+      if (hardware.hasPointerCapture(event.pointerId)) hardware.releasePointerCapture(event.pointerId);
+      if (!current.moved) return;
+      suppressClick = true; event.preventDefault();
+      const rects = [...hardware.querySelectorAll<HTMLElement>('[data-control]')].map(button => ({ id: button.dataset.control as ControlId, ...button.getBoundingClientRect().toJSON() }));
+      const hits = controlsInRect(rects, current.start, { x: event.clientX, y: event.clientY });
+      void this.guard(() => this.selectGroup(selectControls(current.base, hits, current.shift)));
+    });
+    const cancel = () => { drag = null; box?.remove(); box = null; };
+    hardware.addEventListener('pointercancel', cancel);
+    hardware.addEventListener('lostpointercapture', cancel);
+    this.el('undo').addEventListener('click', () => this.guard(() => this.restoreEdit(false)));
+    this.el('redo').addEventListener('click', () => this.guard(() => this.restoreEdit(true)));
+    this.el('copy-controls').addEventListener('click', () => this.copySelection());
+    this.el('paste-controls').addEventListener('click', () => this.guard(() => this.pasteSelection()));
+    document.addEventListener('keydown', event => {
+      if (document.getElementById('page-mapping')?.hidden !== false || document.querySelector('dialog[open]') || event.isComposing) return;
+      const target = event.target as HTMLElement;
+      const action = mappingShortcut(event, Boolean(target.closest('input, select, textarea, [contenteditable]:not([contenteditable="false"])')));
+      if (!action) return;
+      event.preventDefault();
+      if (action === 'copy') this.copySelection();
+      else if (action === 'paste') void this.guard(() => this.pasteSelection());
+      else void this.guard(() => this.restoreEdit(action === 'redo'));
+    });
+    this.el('action').addEventListener('change', () => {
+      if (this.selection.size <= 1 || this.pendingPaste) return;
+      this.batchChanges = { ...Object.fromEntries(Object.entries(this.batchChanges).filter(([key]) => !key.startsWith('hit.'))), action: this.el<HTMLSelectElement>('action').value };
+      this.markBindingDirty(); this.renderBatch();
+    });
+    this.el('fields').addEventListener('input', event => {
+      const input = event.target as HTMLInputElement;
+      if (!input.dataset.batchKey) return;
+      if (input.value === '') delete this.batchChanges[input.dataset.batchKey];
+      else this.batchChanges[input.dataset.batchKey] = input.type === 'number' ? Number(input.value) : input.value;
+      this.markBindingDirty(); this.previewBatch();
+    });
+    this.el('fields').addEventListener('change', event => {
+      const input = event.target as HTMLInputElement;
+      const key = input.dataset.batchKey; if (!key) return;
+      if (input.value === '') delete this.batchChanges[key];
+      else this.batchChanges[key] = input.type === 'number' ? Number(input.value) : input.value;
+      this.markBindingDirty();
+      if (key === 'pressAction' || key.endsWith('.mode') || key.endsWith('.style') || key === 'pad.dual') this.renderBatch();
+      this.previewBatch();
+    });
+  }
+  private copySelection(): void {
+    if (!this.selection.size) return;
+    this.copied = copyControls(this.profile, this.activeModeId, [...this.selection]);
+    this.renderEditActions(); this.options.toast(t('controls_copied', {p0: this.copied.length}));
+  }
+  private async pasteSelection(): Promise<void> {
+    if (!this.selection.size || !this.copied.length) return;
+    let draft: Profile;
+    try { draft = pasteControls(this.profile, this.activeModeId, [...this.selection], this.copied); }
+    catch (error) { this.options.toast(t(error instanceof Error && error.message === 'paste_count_mismatch' ? 'paste_count_mismatch' : 'paste_incompatible')); return; }
+    if (!await this.discardBindingDraft()) return;
+    this.pendingPaste = draft; this.markBindingDirty(); this.renderBatch(); this.previewBatch();
+    this.options.toast(t('paste_ready_to_apply'));
+  }
+  private async restoreEdit(redo: boolean): Promise<void> {
+    const next = this.history.peek(redo); if (!next) return;
+    if (this.editingProfile || this.editingMode) return this.options.toast(t('finish_name_edit_first'));
+    if (!await this.discardBindingDraft()) return;
+    try { this.library.save(next); } catch (error) { this.options.toast(t('could_not_save', {p0: formatError(error)})); return; }
+    const previous = this.profile;
+    // Feedback-only history must not flush a held note or a Toggle's ownership.
+    const structure = (profile: Profile) => JSON.stringify({ ...profile, padVelocityCurve: undefined, modes: profile.modes.map(mode => ({ ...mode,
+      buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined })) });
+    this.history.move(redo); this.profile = next; this.profileDirty = false;
+    if (structure(previous) === structure(next)) { this.runtime.updateFeedback(next); this.runtime.setVelocityCurve(next.padVelocityCurve ?? 'linear'); }
+    else this.runtime.applyProfile(next);
+    this.renderLibrary(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
+  }
+  private renderBatch(): void {
+    const ids = [...this.selection];
+    this.el('selected').textContent = t('selected_control_count', {p0: ids.length});
+    this.el('binding-form').hidden = !ids.length;
+    this.el('binding-summary').textContent = ids.map(controlName).join(' · ');
+    this.el('draft-state').textContent = this.bindingDirty ? t('not_applied') : t('applied');
+    this.el('draft-state').classList.toggle('unsaved', this.bindingDirty);
+    if (!ids.length) return;
+    this.el('strip-touch').innerHTML = ''; this.el('pad-press').innerHTML = ''; this.el('pad-light').innerHTML = '';
+    const actionSelect = this.el<HTMLSelectElement>('action');
+    actionSelect.closest('label')!.hidden = Boolean(this.pendingPaste);
+    if (this.pendingPaste) {
+      this.el('fields').innerHTML = `<p class="caption batch-hint">${l('paste_ready_to_apply', {})}</p>`;
+      this.el('binding-help').textContent = ''; return;
+    }
+    let view = this.profile;
+    try { view = patchControls(this.profile, this.activeModeId, ids, this.batchChanges); } catch { /* Keep incomplete draft editable; apply validates atomically. */ }
+    const mode = view.modes.find(m => m.id === this.activeModeId)!;
+    const actionOf = (id: ControlId) => { const binding = mode.bindings[id]; return binding?.type === 'button-value' || binding?.type === 'strip-position' ? binding.output : binding?.type ?? 'none'; };
+    const action = ids.every(id => actionOf(id) === actionOf(ids[0])) ? actionOf(ids[0]) : '';
+    const actionLabels: Record<string, string> = { none: t('disabled'), note: 'MIDI Note', cc: 'MIDI CC', mode: t('switch_mode'), 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' };
+    actionSelect.innerHTML = `<option value="" disabled>${t('multiple_values')}</option>` + commonActions(ids).map(value => `<option value="${value}">${actionLabels[value] ?? value}</option>`).join('');
+    actionSelect.value = action;
+    this.el('hit-heading').textContent = ids.every(isPadControl) ? t('pad_hit_strike') : 'MIDI OUTPUT';
+    const fields = commonFields(view, this.activeModeId, ids);
+    const fieldLabel = (label: string) => label.includes('_') ? t(label as Parameters<typeof t>[0]) : label;
+    let section = '';
+    let markup = `<p class="caption batch-hint">${l('batch_edit_hint', {})}</p>`;
+    if (ids.every(isPadControl)) {
+      const types = ids.map(id => mode.pressureBindings?.[id as `PAD_${number}`]?.type ?? 'off');
+      const same = types.every(type => type === types[0]);
+      markup += `<label>${l('pressure_action', {})}<select data-batch-key="pressAction"><option value="" disabled ${same ? '' : 'selected'}>${t('multiple_values')}</option>${['off', 'note', 'cc', 'poly-pressure', 'channel-pressure', 'pitchbend'].map(type => `<option value="${type}" ${same && types[0] === type ? 'selected' : ''}>${type === 'off' ? t('disabled') : type}</option>`).join('')}</select></label>`;
+    }
+    for (const field of fields) {
+      const currentSection = field.key.split('.')[0];
+      if (currentSection !== section) { section = currentSection; markup += `<p class="batch-section">${section === 'hit' ? 'MIDI / HIT' : section === 'press' ? 'PAD PRESS' : 'PAD LIGHT'}</p>`; }
+      const same = field.values.every(value => value === field.values[0]);
+      const value = field.key in this.batchChanges ? this.batchChanges[field.key] : same ? field.values[0] : '';
+      let options = field.options;
+      if (field.key === 'pad.color' || field.key === 'pad.onColor') options = PAD_COLORS.map((label, value) => ({ label, value: String(value) }));
+      if (field.key === 'pad.onColor' && ids.every(id => mode.pads[Number(id.slice(4)) - 1].onColor === undefined)) continue;
+      markup += `<label>${labelMarkup(fieldLabel(field.label))}${options
+        ? `<select data-batch-key="${field.key}" data-batch-number="${field.key.startsWith('pad.') && field.key !== 'pad.dual' ? 'true' : 'false'}"><option value="" ${value === '' ? 'selected' : ''} disabled>${t('multiple_values')}</option>${options.map(option => `<option value="${html(option.value)}" ${String(value) === option.value ? 'selected' : ''}>${html(field.key === 'pad.dual' ? option.value === 'true' ? 'Dual' : 'Single' : option.label)}</option>`).join('')}</select>`
+        : `<input type="number" data-batch-key="${field.key}" min="${field.min}" max="${field.max}" step="1" value="${html(value)}" placeholder="${t('multiple_values')}">`}</label>`;
+    }
+    this.el('fields').innerHTML = markup;
+    this.el('binding-help').textContent = t('selection_shortcuts_hint');
+    this.renderEditActions();
+  }
+  private previewBatch(): void {
+    let draft = this.pendingPaste;
+    if (!draft && this.selection.size > 1) {
+      try { draft = patchControls(this.profile, this.activeModeId, [...this.selection], this.batchChanges); } catch { return; }
+    }
+    if (!draft) return;
+    const mode = draft.modes.find(m => m.id === this.activeModeId)!;
+    for (const id of this.selection) if (isPadControl(id)) {
+      const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${id}"]`);
+      const light = mode.pads[Number(id.slice(4)) - 1];
+      if (button) this.paintPad(button, { ...light, brightness: mode.padOffBrightness ?? light.brightness }, true);
+    }
   }
   private async guard(action: () => void | Promise<void>): Promise<void> {
     try { await action(); } catch (error) { this.options.toast(formatError(error)); }
   }
   private currentMode() { return this.profile.modes.find(m => m.id === this.activeModeId)!; }
-  async selectControl(id: ControlId): Promise<void> {
-    if (id !== this.selected && !await this.discardBindingDraft()) return;
-    this.selected = id;
-    this.el('selected').textContent = controlName(id); this.renderBinding(); this.renderMap();
+  async selectControl(id: ControlId, extend = false): Promise<void> {
+    await this.selectGroup(selectControls([...this.selection], [id], extend));
   }
   private selectHardwareControl(id: ControlId): void {
-    if (id === this.selected || this.hardwareSelectionPending || document.getElementById('page-mapping')?.hidden !== false) return;
+    if (!this.followHardwareSelection || this.selection.size > 1 || id === this.selected || this.hardwareSelectionPending || document.getElementById('page-mapping')?.hidden !== false) return;
     this.hardwareSelectionPending = true;
     void this.guard(async () => {
       try { await this.selectControl(id); }
@@ -277,7 +476,7 @@ export class TranslatorUI {
   private async discardBindingDraft(): Promise<boolean> {
     if (!this.bindingDirty) return true;
     if (!await confirmAction(t('this_control_has_unapplied_changes_discard_them'), t('discard_changes'))) return false;
-    this.bindingDirty = false; return true;
+    this.bindingDirty = false; this.batchChanges = {}; this.pendingPaste = null; return true;
   }
   private markBindingDirty(): void {
     this.bindingDirty = true;
@@ -305,9 +504,10 @@ export class TranslatorUI {
   private renderSaveState(): void {
     this.el('save-status').textContent = this.profileDirty || this.bindingDirty ? t('unsaved_changes') : this.library.persisted ? t('saved_in_this_browser') : t('built_in_default_saves_automatically_after_your_first_edit');
     this.el('save-status').classList.toggle('unsaved', this.profileDirty || this.bindingDirty);
+    this.renderEditActions();
   }
   private loadProfile(profile: Profile, dirty: boolean): void {
-    this.profile = profile; this.runtime.applyProfile(profile, true);
+    this.profile = profile; this.history = new EditHistory(profile); this.batchChanges = {}; this.pendingPaste = null; this.runtime.applyProfile(profile, true);
     this.profileDirty = dirty; this.bindingDirty = false; this.editingProfile = false; this.editingMode = false;
     this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
@@ -325,13 +525,19 @@ export class TranslatorUI {
     const mode = this.currentMode();
     this.el<HTMLSelectElement>('button-idle-brightness').innerHTML = brightnessOptions(mode.buttonLight?.off ?? 'off');
     this.el<HTMLSelectElement>('button-on-brightness').innerHTML = brightnessOptions(mode.buttonLight?.on ?? 'normal');
+    this.el<HTMLSelectElement>('toggle-button-off-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight?.off ?? mode.buttonLight?.off ?? 'off');
+    this.el<HTMLSelectElement>('toggle-button-on-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight?.on ?? mode.buttonLight?.on ?? 'normal');
+    const mixed = mode.padOffBrightness === undefined && mode.pads.some(pad => pad.brightness !== mode.pads[0].brightness);
+    this.el<HTMLSelectElement>('pad-off-brightness').innerHTML = (mixed ? `<option value="legacy" selected>${t('legacy_pad_brightness')}</option>` : '')
+      + brightnessOptions(mode.padOffBrightness ?? mode.pads[0].brightness);
+    if (mixed) this.el<HTMLSelectElement>('pad-off-brightness').value = 'legacy';
     this.el<HTMLSelectElement>('pad-on-brightness').innerHTML = brightnessOptions(mode.padOnBrightness ?? 'bright');
   }
   private saveVelocityCurve(): void {
     const next = parseProfile({ ...this.profile, padVelocityCurve: this.el<HTMLSelectElement>('pad-velocity-curve').value as PadVelocityCurve });
     try {
       this.library.save(next);
-      this.profile = next;
+      this.history.record(next); this.profile = next;
       // Only future hits change; preserve held notes and their release targets.
       this.runtime.setVelocityCurve(next.padVelocityCurve!);
       this.renderSaveState();
@@ -347,10 +553,16 @@ export class TranslatorUI {
     const next = parseProfile(this.profile);
     const mode = next.modes.find(m => m.id === this.activeModeId)!;
     mode.buttonLight = { off, on };
+    mode.toggleButtonLight = {
+      off: this.el<HTMLSelectElement>('toggle-button-off-brightness').value as Brightness,
+      on: this.el<HTMLSelectElement>('toggle-button-on-brightness').value as Brightness,
+    };
     mode.padOnBrightness = padOn;
+    const padOff = this.el<HTMLSelectElement>('pad-off-brightness').value;
+    if (padOff !== 'legacy') mode.padOffBrightness = padOff as Brightness;
     try {
       this.library.save(next);
-      this.profile = next;
+      this.history.record(next); this.profile = next;
       this.runtime.updateFeedback(next); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
     } catch (error) {
       this.renderLedSettings();
@@ -358,6 +570,11 @@ export class TranslatorUI {
     }
   }
   private renderBinding(): void {
+    if (this.selection.size !== 1 || this.pendingPaste) { this.renderBatch(); return; }
+    this.batchChanges = {};
+    this.el('action').closest('label')!.hidden = false;
+    this.el('binding-form').hidden = false;
+    this.el('selected').textContent = controlName(this.selected);
     this.bindingDirty = false;
     this.el('draft-state').textContent = t('applied'); this.el('draft-state').classList.remove('unsaved');
     this.el('hit-heading').textContent = isPad(this.selected) ? t('pad_hit_strike') : this.selected === 'SMART_STRIP' ? t('strip_position_position') : 'MIDI OUTPUT';
@@ -370,6 +587,7 @@ export class TranslatorUI {
       : continuous ? [['none', t('disabled')], ['cc', 'MIDI CC']] : isPad(this.selected)
         ? [['none', t('disabled')], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', t('switch_mode')]]
         : [['none', t('disabled')], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', t('switch_mode')]];
+    if (this.selected === 'FIXED_VEL') actions.push(['fixed-velocity', t('fixed_velocity_output')]);
     this.el<HTMLSelectElement>('action').innerHTML = actions.map(([id, label]) => `<option value="${id}" ${labelAttributes(label)}>${label}</option>`).join('');
     const b = this.currentMode().bindings[this.selected];
     this.el<HTMLSelectElement>('action').value = b?.type === 'strip-position' || b?.type === 'button-value' ? b.output : b?.type ?? 'none';
@@ -467,7 +685,7 @@ export class TranslatorUI {
     const action = this.el<HTMLSelectElement>('action').value;
     const b = existing?.type === action || (existing?.type === 'strip-position' || existing?.type === 'button-value') && existing.output === action ? existing : undefined;
     let fields = '';
-    if (action !== 'none' && action !== 'mode') fields += field('channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
+    if (action !== 'none' && action !== 'mode' && action !== 'fixed-velocity') fields += field('channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
     if (action === 'note') {
       const note = b?.type === 'note' ? b : undefined;
       fields += field('note', 'Note Number', note?.note ?? 36);
@@ -511,6 +729,9 @@ export class TranslatorUI {
           ? { type: 'button-value' as const, channel: b.channel, output: 'program' as const, mode: 'trigger' as const, value: b.program } : undefined;
         if (action === 'poly-pressure') fields += field('note', 'Note Number', button?.note ?? 36);
         fields += ccFields('', button, action === 'pitchbend' ? 16383 : 127, !isPad(this.selected));
+      } else if (action === 'fixed-velocity') {
+        fields += field('fixed-velocity', t('fixed_velocity_value'), b?.type === 'fixed-velocity' ? b.velocity : 127, 1, 127);
+        fields += `<p class="caption fixed-velocity-hint">${l('fixed_velocity_hint', {})}</p>`;
       } else if (action === 'mode') fields += `<label>${l('target_mode', {})}<select id="bind-mode">${this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('')}</select></label>`;
       this.el('fields').innerHTML = fields;
       if (b?.type === 'mode') (document.getElementById('bind-mode') as HTMLSelectElement).value = b.modeId;
@@ -534,7 +755,7 @@ export class TranslatorUI {
     const light = lightDraft ?? this.currentMode().pads[index];
     const stripLight = this.selected === 'SMART_STRIP' ? stripDraft ?? this.currentMode().stripLight ?? { mode: 'dot', brightness: 'normal' } : null;
     this.el('pad-light').innerHTML = light
-      ? `<div class="editor-section-label">PAD LIGHT</div><label>Color Mode<select id="bind-color-mode"><option value="single" data-i18n="single_one_color_two_brightness_levels">${t('single_one_color_two_brightness_levels')}</option><option value="dual" data-i18n="dual_two_colors">${t('dual_two_colors')}</option></select></label><label>${l('idle_color_color_off', {})}<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label data-pad-dual>${l('pressed_color_color_on', {})}<select id="bind-on-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label>${l('idle_brightness', {})}<select id="bind-brightness">${brightnessOptions(light.brightness)}</select></label>`
+      ? `<div class="editor-section-label">PAD LIGHT</div><label>Color Mode<select id="bind-color-mode"><option value="single" data-i18n="single_one_color_two_brightness_levels">${t('single_one_color_two_brightness_levels')}</option><option value="dual" data-i18n="dual_two_colors">${t('dual_two_colors')}</option></select></label><label>${l('idle_color_color_off', {})}<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label data-pad-dual>${l('pressed_color_color_on', {})}<select id="bind-on-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label>`
       : stripLight
           ? `<div class="editor-section-label">STRIP LIGHT</div><label>LED Mode<select id="bind-strip-led-mode"><option value="dot" data-i18n="dot_single_point">${t('dot_single_point')}</option><option value="bar" data-i18n="bar_fill_from_left">${t('bar_fill_from_left')}</option><option value="pan" data-i18n="pan_center_outward">${t('pan_center_outward')}</option></select></label><label>Color Value<select id="bind-strip-led-color">${PAD_COLORS.slice(1).map((name, i) => `<option value="${i + 1}">${name}</option>`).join('')}</select></label><label>${l('brightness', {})}<select id="bind-strip-led-brightness">${brightnessOptions(stripLight.brightness)}</select></label>` : '';
     if (light) {
@@ -557,6 +778,13 @@ export class TranslatorUI {
       : t('apply_updates_this_mode_s_control_and_saves_the_entire_profile_note_numb');
   }
   private applyBinding(): void {
+    if (this.pendingPaste || this.selection.size !== 1) {
+      if (!this.selection.size) return;
+      if (!this.el<HTMLFormElement>('binding-form').reportValidity()) return;
+      const next = this.pendingPaste ?? patchControls(this.profile, this.activeModeId, [...this.selection], this.batchChanges);
+      this.profile = next; this.pendingPaste = null; this.batchChanges = {}; this.bindingDirty = false;
+      this.commit(); this.renderBinding(); return;
+    }
     const val = (id: string) => (document.getElementById(`bind-${id}`) as HTMLInputElement).value;
     const num = (id: string) => Number(val(id));
     const switchCc = (prefix: string, shared: { type: 'cc'; channel: number; controller: number }): Binding => {
@@ -577,6 +805,7 @@ export class TranslatorUI {
         ...(pad ? { velocityMin: num('velocity-min'), velocityMax: num('velocity-max') } : {}),
         mode: noteMode, ...(noteMode === 'toggle' && !isPad(this.selected) ? { actionOn: val('note-action-on') as 'down' | 'up' } : {}) };
     }
+    else if (action === 'fixed-velocity') b = { type: 'fixed-velocity', velocity: num('fixed-velocity') };
     else if (action === 'mode') b = { type: 'mode', modeId: val('mode') };
     else if (action === 'cc') {
       const shared = { type: 'cc' as const, channel: num('channel'), controller: num('controller') };
@@ -620,7 +849,7 @@ export class TranslatorUI {
       else mode.bindings.SMART_STRIP_TOUCH = touchBinding;
     }
     if (isPad(this.selected)) {
-      mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: val('brightness') as PadLight['brightness'],
+      mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: mode.pads[Number(this.selected.slice(4)) - 1].brightness,
         ...(val('color-mode') === 'dual' ? { onColor: num('on-color') } : {}) };
       const action = val('press-type');
       let press: PressureBinding = { type: 'off' };
@@ -652,7 +881,7 @@ export class TranslatorUI {
     this.renderEditStates();
   }
   private commit(): boolean {
-    this.runtime.applyProfile(this.profile); this.renderPressed();
+    this.runtime.applyProfile(this.profile); this.history.record(this.profile); this.renderPressed();
     let saved = false;
     try {
       this.library.save(this.profile);
@@ -678,7 +907,7 @@ export class TranslatorUI {
   private save(): void {
     if (!this.applyPending()) return;
     try {
-      this.library.save(this.profile); this.profileDirty = false; this.editingProfile = false;
+      this.library.save(this.profile); this.history.record(this.profile); this.profileDirty = false; this.editingProfile = false;
       this.renderLibrary(); this.renderEditStates(); this.renderSaveState();
       this.options.toast(t('profile_saved'));
     } catch (error) { this.options.toast(t('could_not_save', {p0: formatError(error)})); }
@@ -695,6 +924,7 @@ export class TranslatorUI {
   }
   private bindingLabel(binding?: Binding): string {
     if (!binding || binding.type === 'none') return t('unmapped');
+    if (binding.type === 'fixed-velocity') return `${t('fixed_velocity_output')} · ${binding.velocity} · Toggle`;
     if (binding.type === 'mode') return t('mode_2', {p0: this.profile.modes.find(m => m.id === binding.modeId)?.name ?? binding.modeId});
     if (binding.type === 'note') return `CH ${binding.channel} · Note ${binding.note} · ${binding.mode === 'toggle' ? 'Toggle' : 'Gate'}`;
     if (binding.type === 'cc') return `CH ${binding.channel} · CC ${binding.controller}${['momentary', 'toggle', 'trigger', 'inc'].includes(binding.style) ? ` · ${{ momentary: 'Gate', toggle: 'Toggle', trigger: 'Trigger', inc: 'Inc' }[binding.style as 'momentary' | 'toggle' | 'trigger' | 'inc']}` : binding.style === 'strip' ? ` · ${{ absolute: 'Absolute', relative: 'Relative', 'relative-offset': 'Relative (Offset)' }[binding.mode ?? 'absolute']}` : ''}`;
@@ -719,14 +949,13 @@ export class TranslatorUI {
     return mode && brightness ? { mode, brightness, color: colorValue === undefined ? 17 : Number(colorValue) } : null;
   }
   private readPadLightDraft(): PadLight | null {
-    if (!isPad(this.selected)) return null;
+    if (this.selection.size !== 1 || !isPad(this.selected)) return null;
     const colorInput = document.getElementById('bind-color') as HTMLSelectElement | null;
-    const brightnessInput = document.getElementById('bind-brightness') as HTMLSelectElement | null;
-    if (!colorInput || !brightnessInput) return null;
+    if (!colorInput) return null;
     const color = Number(colorInput.value);
     const dual = (document.getElementById('bind-color-mode') as HTMLSelectElement | null)?.value === 'dual';
     const onColor = dual ? Number((document.getElementById('bind-on-color') as HTMLSelectElement | null)?.value) : undefined;
-    const brightness = brightnessInput.value as PadLight['brightness'];
+    const brightness = this.currentMode().pads[Number(this.selected.slice(4)) - 1].brightness;
     if (!Number.isInteger(color) || color < 0 || color >= PAD_COLORS.length ||
       onColor !== undefined && (!Number.isInteger(onColor) || onColor < 0 || onColor >= PAD_COLORS.length) ||
       !['off', 'dim', 'normal', 'bright'].includes(brightness)) return null;
@@ -745,7 +974,7 @@ export class TranslatorUI {
     const preview = draft.color !== saved.color || (draft.onColor ?? draft.color) !== (saved.onColor ?? saved.color) || draft.brightness !== saved.brightness;
     const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${this.selected}"]`);
     if (!button) return;
-    this.paintPad(button, draft, preview);
+    this.paintPad(button, { ...draft, brightness: this.currentMode().padOffBrightness ?? draft.brightness }, preview);
     button.title = `${controlName(this.selected)} · ${this.controlSummary(this.selected)}${preview ? t('light_preview_not_applied') : ''}`;
     button.setAttribute('aria-label', t('select', {p0: button.title}));
     button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
@@ -760,18 +989,19 @@ export class TranslatorUI {
       const press = isPad(id) ? this.currentMode().pressureBindings?.[id] : undefined;
       const touch = id === 'SMART_STRIP' ? this.currentMode().bindings.SMART_STRIP_TOUCH : undefined;
       const mapped = Boolean(binding && binding.type !== 'none' || press && press.type !== 'off' || touch && touch.type !== 'none');
-      button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', id === this.selected);
-      button.setAttribute('aria-pressed', String(id === this.selected));
+      button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', this.selection.has(id));
+      button.setAttribute('aria-pressed', String(this.selection.has(id)));
       button.title = `${controlName(id)} · ${this.controlSummary(id)}`;
       button.setAttribute('aria-label', t('select', {p0: button.title}));
     button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
       if (PAD_IDS.includes(id as `PAD_${number}`)) {
         const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-        this.paintPad(button, light);
+        this.paintPad(button, { ...light, brightness: this.currentMode().padOffBrightness ?? light.brightness });
         button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel} / ${binding.note}` : this.bindingLabel(binding);
       }
     });
     this.el('mapped-count').textContent = t('controls_mapped', {p0: count});
+    this.renderEditActions();
   }
   private renderPorts(): void {
     const select = this.el<HTMLSelectElement>('output');
@@ -784,6 +1014,8 @@ export class TranslatorUI {
   private handleEvent(event: InputEvent): void {
     if (event.kind === 'button' && event.pressed)
       this.selectHardwareControl(event.controlId === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : event.controlId);
+    else if (event.kind === 'pad' && event.raw > 0 && (event.event === 'note-on' || event.event === 'press-on'))
+      this.selectHardwareControl(event.controlId);
     else if (event.kind === 'encoder' && event.delta !== 0) this.selectHardwareControl('ENCODER_ROTATE');
     else if (event.kind === 'strip' && event.raw > 0) this.selectHardwareControl('SMART_STRIP');
   }
@@ -799,7 +1031,7 @@ export class TranslatorUI {
       const pressed = activePads.has(id);
       button.classList.toggle('is-pressed', pressed);
       const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness ?? 'bright' } : light);
+      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness ?? 'bright' } : { ...light, brightness: this.currentMode().padOffBrightness ?? light.brightness });
     });
   }
   private queueModeLights(): void {
