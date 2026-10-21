@@ -4,7 +4,7 @@ import {
   applyPadVelocityCurve, PAD_VELOCITY_CURVES, MappingEngine, createDefaultProfile, parseProfile,
   type InputEvent
 } from '@midiy/mikro-core';
-import { ProfileLibrary } from '../src/profile-library.ts';
+import { ProfileLibrary } from '../src/mapping/profile-library.ts';
 
 const hit = (velocity: number): InputEvent => ({ kind: 'pad', controlId: 'PAD_1', padIndex: 12,
   event: 'note-on', raw: velocity * 32, velocity });

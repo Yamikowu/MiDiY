@@ -15,4 +15,9 @@ export const controls = groups.flatMap(group => group.controls.map(id => ({
   instruction: id === 'ENCODER_ROTATE' ? '順時針轉動 3 格、逆時針轉動 3 格。' : id === 'SMART_STRIP' ? '觸碰、滑動，再離開 Smart Strip。' : /^PAD_\d+$/.test(id) ? '輕按一次、重按一次，每次都放開。' : '按下並放開 2 次。'
 })));
 
-export const getControl = id => controls.find(control => control.id === id);
+// Mapping exposes touch bindings separately; Testing keeps its original 58 capture targets.
+export const mappingControls = [...controls,
+  { id: 'ENCODER_TOUCH', group: 'edit', label: 'Encoder 觸碰', instruction: '觸碰並離開旋鈕。' },
+  { id: 'SMART_STRIP_TOUCH', group: 'performance', label: 'Smart Strip 觸碰', instruction: '觸碰並離開 Smart Strip。' }
+];
+export const getControl = id => mappingControls.find(control => control.id === id);

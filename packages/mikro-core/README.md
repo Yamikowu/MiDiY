@@ -63,7 +63,7 @@ brightness, shared Pad pressed brightness, shared button idle/pressed brightness
 and Strip Dot/Bar/Pan behavior and palette color independently for
 each mode. Existing Strip settings without a color default to White (palette index 17).
 
-See the repository's `docs/settings/protocol.md` and `test/fixtures/mikro-vectors.json` for
+See the repository's `docs/devices/mikro-mk3/protocol.md` and `test/fixtures/mikro-vectors.json` for
 language-independent byte conventions and firmware porting vectors. TypeScript
 itself is not a guarantee of MCU compatibility; firmware needs USB Host HID,
 power management and its own USB/BLE/network MIDI adapter.

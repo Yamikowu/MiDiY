@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changedBytes, summarizeCapture, normalizeImport } from '../src/analysis.js';
-import { controls, getControl } from '../src/controls.js';
+import { changedBytes, summarizeCapture, normalizeImport } from '../src/research/analysis.js';
+import { controls, getControl } from '../src/devices/mikro-mk3/controls.js';
 
 test('Mikro MK3 control list has unique physical targets', () => {
   assert.equal(controls.length, 58);

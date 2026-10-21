@@ -3,5 +3,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 
-docs/info
-docs/settings
+docs/devices/mikro-mk3/info
+docs/devices/mikro-mk3/settings

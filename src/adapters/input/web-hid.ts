@@ -1,33 +1,44 @@
-import { VENDOR_ID, PRODUCT_ID, type OutputReport } from '@midiy/mikro-core';
+import type { OutputReport } from '@midiy/mikro-core';
+import type { RawReport, DeviceInfo, InputSelection, ControllerInput } from '../../runtime/contracts';
 
 export function outputReports(collections: readonly HIDCollectionInfo[]): HIDReportInfo[] {
   return collections.flatMap(c => [...(c.outputReports ?? []), ...outputReports(c.children ?? [])]);
 }
-export class WebHidAdapter {
+export class WebHidAdapter implements ControllerInput {
   device: HIDDevice | null = null;
   private writes: Promise<void> = Promise.resolve();
   private generation = 0;
   private closing: Promise<void> | null = null;
-  constructor(private readonly receive: (event: HIDInputReportEvent) => void,
-    private readonly lost: () => void, private readonly api: HID | undefined = navigator.hid) {
+  private receive: (report: RawReport) => void = () => {};
+  private lost: () => void = () => {};
+  private onInput = (event: HIDInputReportEvent) => this.receive({ reportId: event.reportId,
+    data: new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength).slice() });
+  bind(receive: (report: RawReport) => void, lost: () => void) { this.receive = receive; this.lost = lost; }
+  get info(): DeviceInfo | null {
+    return this.device?.opened ? { vendorId: this.device.vendorId, productId: this.device.productId,
+      productName: this.device.productName ?? '', outputReportIds: outputReports(this.device.collections).flatMap(r => r.reportId === undefined ? [] : [r.reportId]) } : null;
+  }
+  cancelPending(): void { this.generation++; }
+  constructor(private readonly selection: InputSelection,
+    private readonly api: HID | undefined = typeof navigator === 'undefined' ? undefined : navigator.hid) {
     api?.addEventListener('disconnect', event => {
       if (event.device !== this.device) return;
-      this.device.removeEventListener('inputreport', this.receive);
+      this.device.removeEventListener('inputreport', this.onInput);
       this.device = null; this.generation++; this.lost();
     });
   }
-  async connect(): Promise<HIDDevice | null> {
+  async connect(): Promise<DeviceInfo | null> {
     if (this.closing) await this.closing;
     if (!this.api) throw new Error('此瀏覽器不支援 WebHID');
-    if (this.device?.opened) return this.device;
-    let devices = (await this.api.getDevices()).filter(d => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID);
-    if (!devices.length) devices = await this.api.requestDevice({ filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }] });
+    if (this.device?.opened) return this.info;
+    let devices = (await this.api.getDevices()).filter(d => d.vendorId === this.selection.vendorId && d.productId === this.selection.productId);
+    if (!devices.length) devices = await this.api.requestDevice({ filters: [{ vendorId: this.selection.vendorId, productId: this.selection.productId }] });
     if (!devices.length) return null;
-    const device = devices.find(d => outputReports(d.collections).some(r => r.reportId === 0x80)) ?? devices[0];
+    const device = devices.find(d => outputReports(d.collections).some(r => r.reportId === this.selection.preferredOutputReportId)) ?? devices[0];
     if (!device.opened) await device.open();
     this.generation++; this.device = device;
-    device.addEventListener('inputreport', this.receive);
-    return device;
+    device.addEventListener('inputreport', this.onInput);
+    return this.info;
   }
   send(report: OutputReport): Promise<void> {
     if (this.closing) return Promise.reject(new Error('HID 連線正在關閉'));
@@ -54,7 +65,7 @@ export class WebHidAdapter {
     if (!device) return Promise.resolve();
     // Cancel queued ordinary writes; an in-flight write must settle before reset.
     this.generation++;
-    device.removeEventListener('inputreport', this.receive);
+    device.removeEventListener('inputreport', this.onInput);
     const reset = finalReport ? this.enqueue(finalReport) : this.writes.catch(() => {});
     this.closing = (async () => {
       try {

@@ -1,21 +1,19 @@
 import {
-  PAD_VELOCITY_CURVES, type PadVelocityCurve, InputDecoder, MappingEngine, createDefaultProfile, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
-  encodePadLights, encodeLights, type Binding, type Brightness, type ButtonLightId, type ControlId, type Profile, type InputEvent, type MidiMessage,
+  PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
+  type Binding, type Brightness, type ControlId, type Profile, type InputEvent, 
   type PadLight, type OutputReport, type PressureBinding, type StripLightMode
 } from '@midiy/mikro-core';
-import { WebHidAdapter, outputReports } from './adapters/web-hid';
-import { WebMidiAdapter } from './adapters/web-midi';
-import { renderHardware } from './hardware-view.js';
-import { getControl } from './controls.js';
+import { TranslatorRuntime } from '../runtime/translator-runtime';
+import { renderHardware } from '../devices/mikro-mk3/hardware-view.js';
+import { getControl } from '../devices/mikro-mk3/controls.js';
 import { ProfileLibrary } from './profile-library';
-import { confirmAction } from './dialogs';
+import { confirmAction } from '../shared/dialogs';
 
 const PAD_PREVIEW = ['#666666', '#ef6262', '#ef914b', '#efac70', '#eab760', '#e4cd5c', '#a9d866', '#60be82', '#6bd0ad', '#71cdd9', '#52b1c8', '#749ee9', '#9d87c9', '#a087e4', '#b377d4', '#cf77bc', '#e979ae', '#e7e7df'];
 const isPad = (id: ControlId): id is `PAD_${number}` => PAD_IDS.includes(id as `PAD_${number}`);
-const isLitButton = (id: ControlId): id is ButtonLightId => BUTTON_IDS.slice(0, 39).includes(id as ButtonLightId);
 const brightnessOptions = (selected: Brightness) => ([['off', '關閉'], ['dim', '低'], ['normal', '中'], ['bright', '高']] as const)
   .map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('');
-const controlName = (id: ControlId) => getControl(id)?.label ?? 'Encoder 觸碰';
+const controlName = (id: ControlId) => getControl(id)?.label ?? id;
 const html = (text: unknown) => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const field = (id: string, label: string, value: number, min = 0, max = 127) => `<label>${label}<input id="bind-${id}" type="number" min="${min}" max="${max}" value="${value}" required></label>`;
 const ccFields = (prefix: string, binding?: Binding, max = 127, includeActionOn = true) => {
@@ -36,60 +34,32 @@ const ccFields = (prefix: string, binding?: Binding, max = 127, includeActionOn 
     + (includeActionOn ? `<label data-cc-fields="toggle trigger inc">Action on<select id="bind-${prefix}action-on"><option value="down">按下</option><option value="up">放開</option></select></label>` : '')
     + `<input type="hidden" id="bind-${prefix}initial-style" value="${style}">`;
 };
-export interface TranslatorOptions {
-  receive: (event: HIDInputReportEvent) => void;
-  disconnected: () => void;
-  toast: (message: string) => void;
-}
+export interface TranslatorOptions { toast: (message: string) => void }
 export class TranslatorUI {
-  readonly hid: WebHidAdapter;
-  readonly midi: WebMidiAdapter;
-  private decoder = new InputDecoder();
-  private profile: Profile = createDefaultProfile();
-  private library: ProfileLibrary;
+  private profile: Profile;
   private profileDirty = false;
   private bindingDirty = false;
   private editingProfile = false;
   private editingMode = false;
-  private engine: MappingEngine;
   private selected: ControlId = 'PAD_1';
   private hardwareSelectionPending = false;
-  private activePads = new Set<string>();
-  private pressedButtons = new Set<string>();
-  private stripRaw = 0;
-  private ledEnabled = false;
-  private pendingLed: OutputReport | null = null;
-  private writingLed = false;
-  private ledGeneration = 0;
-  private eventRows: string[] = [];
-  private frame = 0;
-  private midiCount = 0;
-  constructor(private readonly options: TranslatorOptions) {
-    this.library = new ProfileLibrary({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) });
-    this.profile = this.library.current;
-    this.engine = new MappingEngine(this.profile);
-    this.midi = new WebMidiAdapter(() => this.renderPorts(), () => {
-      // If an endpoint vanished, discard held notes; it may be impossible to deliver their offs.
-      const messages = this.engine.flush();
-      this.options.toast('MIDI 輸出埠已離線；已清除演奏狀態，接收端若仍有聲音請使用其 Panic。');
-      return messages;
-    });
-    this.hid = new WebHidAdapter(event => {
-      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
-      const decoded = this.decoder.decode(event.reportId, bytes);
-      for (const event of decoded.events) this.handleEvent(event);
-      decoded.diagnostics.forEach(d => this.addEvent(`⚠ ${d}`));
-      this.options.receive(event);
-    }, () => {
-      this.release(); this.ledEnabled = false; this.pendingLed = null; this.ledGeneration++;
-      this.renderDevice(); this.options.disconnected();
-    });
+  private get activeModeId() { return this.runtime.activeModeId; }
+  constructor(private readonly runtime: TranslatorRuntime, private readonly library: ProfileLibrary,
+    private readonly options: TranslatorOptions) {
+    this.profile = library.current;
     this.mount();
-    if (this.library.warning) this.options.toast(this.library.warning);
-    window.addEventListener('pagehide', () => {
-      // Browsers do not wait for this promise during navigation or termination.
-      void this.disconnect().catch(() => {});
+    let midiStatus = '', deviceStatus = '';
+    runtime.subscribe(event => {
+      if (event.type === 'state') {
+        const midi = JSON.stringify(event.state.midi);
+        const device = JSON.stringify([event.state.device, event.state.ledEnabled, event.state.ledStatus]);
+        if (device !== deviceStatus) { deviceStatus = device; this.renderDevice(); }
+        if (midi !== midiStatus) { midiStatus = midi; this.renderPorts(); }
+        this.renderPressed(); this.queueModeLights();
+      } else if (event.type === 'decoded') this.handleEvent(event.event);
+      else if (event.type === 'mode') { this.renderModes(); this.renderBinding(); this.renderMap(); }
     });
+    if (library.warning) options.toast(library.warning);
   }
   private el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(`midi-${id}`) as T; }
   private mount(): void {
@@ -147,7 +117,6 @@ export class TranslatorUI {
       </div>
       <div class="mapping-status"><span id="midi-status" role="status">未選擇 MIDI 輸出</span><span>設定檔保存在此瀏覽器 · 可匯出 JSON</span></div>`;
     renderHardware(this.el('hardware'), (id: string) => this.selectControl(id as ControlId), { includeEncoderTouch: true });
-    document.getElementById('testing-decoded')!.innerHTML = `<div class="section-heading"><div><p class="eyebrow">DECODED INPUT</p><h2>即時解碼</h2></div><span id="midi-count" class="section-note">0 MIDI 訊息</span></div><label class="switch"><input id="midi-pressure-events" type="checkbox">顯示 Pad 壓力事件</label><pre id="midi-events" aria-live="off">等待控制器輸入…</pre>`;
     this.el('binding-form').addEventListener('input', () => this.markBindingDirty());
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
     this.el('pad-light').addEventListener('input', () => this.previewPadLight());
@@ -196,15 +165,15 @@ export class TranslatorUI {
       if ((this.profileDirty || this.bindingDirty) && !await confirmAction('目前設定尚未儲存。捨棄變更並載入選取的設定檔？', '捨棄並載入')) return this.renderLibrary();
       try { this.loadProfile(this.library.select(id), false); } finally { this.renderLibrary(); }
     }));
-    this.el('enable').addEventListener('click', () => this.guard(() => this.midi.enable()));
+    this.el('enable').addEventListener('click', () => this.guard(() => this.runtime.enableMidi()));
     this.el('output').addEventListener('change', () => this.guard(async () => {
       const id = this.el<HTMLSelectElement>('output').value;
-      await this.midi.select(id, this.engine.flush()); this.renderPorts();
+      await this.runtime.selectOutput(id); this.renderPorts();
     }));
     this.el('mode').addEventListener('change', async () => {
       if (!await this.discardBindingDraft()) { this.renderModes(); return; }
-      this.dispatch(this.engine.switchMode(this.el<HTMLSelectElement>('mode').value).messages);
-      this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
+      this.runtime.switchMode(this.el<HTMLSelectElement>('mode').value);
+      this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
     });
     this.el('mode-edit').addEventListener('click', () => {
       if (this.editingProfile) return this.options.toast('請先儲存設定檔名稱。');
@@ -222,7 +191,7 @@ export class TranslatorUI {
     });
     this.el('binding-form').addEventListener('submit', event => { event.preventDefault(); this.guard(() => this.applyBinding()); });
     this.el('panic').addEventListener('click', () => {
-      this.release(); this.options.toast('已釋放目前音符及按住的 CC。');
+      this.runtime.panic(); this.options.toast('已釋放目前音符及按住的 CC。');
     });
     this.el('add-mode').addEventListener('click', async () => {
       if (this.editingProfile) return this.options.toast('請先儲存設定檔名稱。');
@@ -230,8 +199,8 @@ export class TranslatorUI {
       if (this.profile.modes.length >= 64) return this.options.toast('最多 64 個模式。');
       const copy = JSON.parse(JSON.stringify(this.currentMode()));
       copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`;
-      this.profile.modes.push(copy); this.commit(); this.dispatch(this.engine.switchMode(copy.id).messages);
-      this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
+      this.profile.modes.push(copy); this.commit(); this.runtime.switchMode(copy.id);
+      this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
       this.editingMode = true; this.renderEditStates(); this.el<HTMLInputElement>('mode-name').focus();
       this.el<HTMLInputElement>('mode-name').select();
     });
@@ -239,7 +208,7 @@ export class TranslatorUI {
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length === 1) return this.options.toast('至少保留一個模式。');
       if (!await confirmAction(`刪除模式「${this.currentMode().name}」？指向它的切換動作會停用。`, '刪除模式')) return;
-      const removed = this.engine.activeModeId;
+      const removed = this.activeModeId;
       this.profile.modes = this.profile.modes.filter(m => m.id !== removed);
       for (const mode of this.profile.modes) for (const [id, binding] of Object.entries(mode.bindings)) {
         if (binding?.type === 'mode' && binding.modeId === removed) delete mode.bindings[id as ControlId];
@@ -248,7 +217,7 @@ export class TranslatorUI {
       this.editingMode = false; this.commit(); this.renderBinding(); this.renderEditStates();
     });
     this.el('initial').addEventListener('change', () => {
-      if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.engine.activeModeId; this.commit(); }
+      if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.activeModeId; this.commit(); }
       else this.renderModes();
     });
     this.el('save').addEventListener('click', () => this.save());
@@ -268,9 +237,7 @@ export class TranslatorUI {
       this.options.toast('已匯入並儲存為新的設定檔。');
     }));
     this.el('led-enable').addEventListener('change', () => {
-      this.ledEnabled = this.el<HTMLInputElement>('led-enable').checked;
-      this.ledGeneration++; this.pendingLed = null;
-      if (this.ledEnabled) this.queueModeLights(); else this.queueLights(PAD_IDS.map(() => ({ color: 0, brightness: 'off' })));
+      this.runtime.setLedEnabled(this.el<HTMLInputElement>('led-enable').checked);
       this.renderDevice();
     });
     for (const id of ['button-idle-brightness', 'button-on-brightness', 'pad-on-brightness']) {
@@ -282,7 +249,7 @@ export class TranslatorUI {
   private async guard(action: () => void | Promise<void>): Promise<void> {
     try { await action(); } catch (error) { this.options.toast(error instanceof Error ? error.message : String(error)); }
   }
-  private currentMode() { return this.profile.modes.find(m => m.id === this.engine.activeModeId)!; }
+  private currentMode() { return this.profile.modes.find(m => m.id === this.activeModeId)!; }
   async selectControl(id: ControlId): Promise<void> {
     if (id !== this.selected && !await this.discardBindingDraft()) return;
     this.selected = id;
@@ -329,17 +296,17 @@ export class TranslatorUI {
     this.el('save-status').classList.toggle('unsaved', this.profileDirty || this.bindingDirty);
   }
   private loadProfile(profile: Profile, dirty: boolean): void {
-    this.release(); this.profile = profile; this.engine = new MappingEngine(profile);
+    this.profile = profile; this.runtime.applyProfile(profile, true);
     this.profileDirty = dirty; this.bindingDirty = false; this.editingProfile = false; this.editingMode = false;
     this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
   }
   private renderModes(): void {
     this.el<HTMLSelectElement>('mode').innerHTML = this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('');
-    this.el<HTMLSelectElement>('mode').value = this.engine.activeModeId;
+    this.el<HTMLSelectElement>('mode').value = this.activeModeId;
     if (!this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     if (!this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
-    this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.engine.activeModeId;
+    this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.activeModeId;
     this.renderLedSettings();
   }
   private renderLedSettings(): void {
@@ -355,7 +322,7 @@ export class TranslatorUI {
       this.library.save(next);
       this.profile = next;
       // Only future hits change; preserve held notes and their release targets.
-      this.engine.profile.padVelocityCurve = next.padVelocityCurve;
+      this.runtime.setVelocityCurve(next.padVelocityCurve!);
       this.renderSaveState();
     } catch (error) {
       this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
@@ -367,13 +334,13 @@ export class TranslatorUI {
     const on = this.el<HTMLSelectElement>('button-on-brightness').value as Brightness;
     const padOn = this.el<HTMLSelectElement>('pad-on-brightness').value as Brightness;
     const next = parseProfile(this.profile);
-    const mode = next.modes.find(m => m.id === this.engine.activeModeId)!;
+    const mode = next.modes.find(m => m.id === this.activeModeId)!;
     mode.buttonLight = { off, on };
     mode.padOnBrightness = padOn;
     try {
       this.library.save(next);
       this.profile = next;
-      this.renderPressed(); this.queueModeLights(); this.renderSaveState();
+      this.runtime.updateFeedback(next); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
     } catch (error) {
       this.renderLedSettings();
       this.options.toast(`燈光設定儲存失敗：${String(error)}`);
@@ -620,7 +587,7 @@ export class TranslatorUI {
       else b = { ...shared, mode: 'inc', from: num('from'), to: num('to'), step: num('step'), wrap: (document.getElementById('bind-wrap') as HTMLInputElement).checked, ...actionOn };
     }
     const next = JSON.parse(JSON.stringify(this.profile)) as Profile;
-    const mode = next.modes.find(m => m.id === this.engine.activeModeId)!;
+    const mode = next.modes.find(m => m.id === this.activeModeId)!;
     mode.bindings[this.selected] = b;
     if (this.selected === 'SMART_STRIP') {
       const touch = val('touch-type');
@@ -671,7 +638,7 @@ export class TranslatorUI {
     this.renderEditStates();
   }
   private commit(): boolean {
-    this.dispatch(this.engine.reconfigure(this.profile)); this.activePads.clear(); this.renderPressed();
+    this.runtime.applyProfile(this.profile); this.renderPressed();
     let saved = false;
     try {
       this.library.save(this.profile);
@@ -793,72 +760,34 @@ export class TranslatorUI {
   private renderPorts(): void {
     const select = this.el<HTMLSelectElement>('output');
     if (!select) return;
-    select.innerHTML = '<option value="">停用 MIDI 輸出</option>' + [...this.midi.access?.outputs.values() ?? []].filter(p => p.state === 'connected').map(p => `<option value="${html(p.id)}">${html(p.name || p.id)}</option>`).join('');
-    select.disabled = !this.midi.access; select.value = this.midi.output?.id ?? '';
-    this.el('status').textContent = this.midi.output ? `輸出：${this.midi.output.name || this.midi.output.id}` : '未選擇 MIDI 輸出';
-  }
-  private dispatch(messages: MidiMessage[]): void {
-    try { this.midi.send(messages); if (this.midi.output) this.midiCount += messages.length; }
-    catch (error) { this.options.toast(`MIDI 發送失敗：${String(error)}`); }
-    if (messages.length) this.addEvent(`${this.midi.output ? 'MIDI →' : '預覽 MIDI'} ${messages.map(m => m.map(v => v.toString(16).padStart(2, '0')).join(' ')).join(' | ')}`);
+    const midi = this.runtime.snapshot.midi;
+    select.innerHTML = '<option value="">停用 MIDI 輸出</option>' + midi.ports.map(p => `<option value="${html(p.id)}">${html(p.name)}</option>`).join('');
+    select.disabled = !midi.enabled; select.value = midi.output?.id ?? '';
+    this.el('status').textContent = midi.output ? `輸出：${midi.output.name}` : '未選擇 MIDI 輸出';
   }
   private handleEvent(event: InputEvent): void {
-    if (event.kind === 'pad') {
-      const wasActive = this.activePads.has(event.controlId);
-      if ((event.event === 'note-on' || event.event === 'press-on') && event.raw > 0) this.activePads.add(event.controlId);
-      if (event.event === 'note-off' || event.event === 'press-off') this.activePads.delete(event.controlId);
-      if (wasActive !== this.activePads.has(event.controlId)) this.queueModeLights();
-    }
-    if (event.kind === 'button') {
-      document.querySelectorAll<HTMLElement>('[data-control]').forEach(b => { if (b.dataset.control === event.controlId) b.classList.toggle('is-pressed', event.pressed); });
-      if (isLitButton(event.controlId)) {
-        if (event.pressed) this.pressedButtons.add(event.controlId);
-        else this.pressedButtons.delete(event.controlId);
-        this.queueModeLights();
-      }
-    }
-    if (event.kind === 'strip') {
-      this.stripRaw = Math.max(0, Math.min(200, event.raw));
-      this.queueModeLights();
-    }
-    const result = this.engine.process(event); this.dispatch(result.messages);
-    if (result.modeChanged) { this.activePads.clear(); this.renderModes(); this.renderBinding(); this.renderMap(); this.queueModeLights(); }
-    this.renderPressed();
     if (event.kind === 'button' && event.pressed)
       this.selectHardwareControl(event.controlId === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : event.controlId);
     else if (event.kind === 'encoder' && event.delta !== 0) this.selectHardwareControl('ENCODER_ROTATE');
     else if (event.kind === 'strip' && event.raw > 0) this.selectHardwareControl('SMART_STRIP');
-    if (event.kind !== 'pad' || event.event !== 'aftertouch' || this.el<HTMLInputElement>('pressure-events').checked) this.addEvent(JSON.stringify(event));
-  }
-  private addEvent(text: string): void {
-    this.eventRows.unshift(text); this.eventRows.length = Math.min(40, this.eventRows.length);
-    if (this.frame) return;
-    this.frame = requestAnimationFrame(() => {
-      this.frame = 0; this.el('events').textContent = this.eventRows.join('\n'); this.el('count').textContent = `${this.midiCount} MIDI 訊息`;
-    });
   }
   private renderPressed(): void {
+    const state = this.runtime.snapshot;
+    const pressed = new Set(state.pressedButtons), activePads = new Set(state.activePads);
+    document.querySelectorAll<HTMLElement>('[data-control]').forEach(button => {
+      if (!button.dataset.control?.startsWith('PAD_')) button.classList.toggle('is-pressed', pressed.has(button.dataset.control!));
+    });
     document.querySelectorAll<HTMLButtonElement>('[data-control^="PAD_"]').forEach(button => {
       const id = button.dataset.control as `PAD_${number}`;
       if (!PAD_IDS.includes(id)) return;
-      const pressed = this.activePads.has(id);
+      const pressed = activePads.has(id);
       button.classList.toggle('is-pressed', pressed);
       const light = this.currentMode().pads[Number(id.slice(4)) - 1];
       this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness ?? 'bright' } : light);
     });
   }
   private queueModeLights(): void {
-    const mode = this.currentMode();
-    const buttons = Object.fromEntries(BUTTON_IDS.slice(0, 39)
-      .filter(id => { const binding = mode.bindings[id]; return binding && binding.type !== 'none'; })
-      .map(id => [id, mode.buttonLight ?? { off: 'off', on: 'normal' }])) as NonNullable<Parameters<typeof encodeLights>[0]['buttons']>;
-    const report = encodeLights({ pads: mode.pads, pressedPads: this.activePads, padOnBrightness: mode.padOnBrightness,
-      buttons, pressedButtons: this.pressedButtons,
-      strip: { raw: this.stripRaw, mode: mode.stripLight?.mode ?? 'dot', brightness: mode.stripLight?.brightness ?? 'normal',
-        color: mode.stripLight?.color } });
-    this.renderLightPreview(report);
-    if (!this.ledEnabled) return;
-    this.queueReport(report);
+    this.renderLightPreview(this.runtime.snapshot.lightReport);
   }
   private renderLightPreview(report: OutputReport): void {
     const stripLight = this.currentMode().stripLight;
@@ -874,58 +803,16 @@ export class TranslatorUI {
       button.dataset.lightBrightness = report.data[index] === 0x7f ? 'bright' : report.data[index] === 0x7c ? 'dim' : 'normal';
     }
   }
-  private queueLights(pads: PadLight[]): void {
-    this.queueReport(encodePadLights(pads));
-  }
-  private queueReport(report: OutputReport): void {
-    if (!this.hid.device?.opened) return;
-    this.pendingLed = report;
-    if (!this.writingLed) void this.pumpLights();
-  }
-  private async pumpLights(): Promise<void> {
-    this.writingLed = true;
-    while (this.pendingLed) {
-      const report = this.pendingLed, generation = this.ledGeneration; this.pendingLed = null;
-      try {
-        await this.hid.send(report);
-        if (generation === this.ledGeneration) this.el('led-status').textContent = '已送出 0x80 / 80 bytes。請確認實體燈光。';
-      } catch (error) {
-        if (generation === this.ledGeneration) {
-          this.ledEnabled = false; this.pendingLed = null; this.renderDevice();
-          this.el('led-status').textContent = `LED 發送失敗：${String(error)}`;
-        }
-      }
-    }
-    this.writingLed = false;
-  }
   private renderDevice(): void {
-    const connected = Boolean(this.hid.device?.opened);
-    const reports = this.hid.device ? outputReports(this.hid.device.collections) : [];
-    const supported = reports.some(r => r.reportId === 0x80);
+    const state = this.runtime.snapshot;
+    const connected = Boolean(state.device);
+    const supported = state.device?.outputReportIds.includes(0x80);
     this.el<HTMLInputElement>('led-enable').disabled = !connected || !supported;
-    this.el<HTMLInputElement>('led-enable').checked = this.ledEnabled;
-    this.el('led-summary').textContent = this.ledEnabled ? '已接管' : '尚未接管';
-    if (!connected) this.el('led-status').textContent = '連線時不會自動發送 LED 或螢幕封包。';
-    else if (!supported) this.el('led-status').textContent = '此 HID 介面未宣告 0x80 輸出，無法接管 LED。';
-    else if (!this.ledEnabled) this.el('led-status').textContent = '裝置已就緒。啟用接管後才能控制 Pad、按鍵與 Strip 燈光。';
-  }
-  async connect(): Promise<HIDDevice | null> {
-    this.decoder.reset(); this.release();
-    const device = await this.hid.connect(); this.renderDevice(); return device;
-  }
-  async disconnect(): Promise<void> {
-    const reset = this.ledEnabled
-      ? { reportId: 0x80, data: new Uint8Array(80) } : undefined;
-    // Disable producers before release(), which normally queues idle mode lights.
-    this.ledEnabled = false; this.ledGeneration++; this.pendingLed = null;
-    this.release();
-    try { await this.hid.disconnect(reset); }
-    finally { this.renderDevice(); }
-  }
-
-  private release(): void {
-    this.dispatch(this.engine.reset()); this.decoder.reset(); this.activePads.clear(); this.pressedButtons.clear(); this.stripRaw = 0; this.renderPressed();
-    document.querySelectorAll('[data-control]').forEach(b => b.classList.remove('is-pressed'));
-    this.queueModeLights();
+    this.el<HTMLInputElement>('led-enable').checked = state.ledEnabled;
+    this.el('led-summary').textContent = state.ledEnabled ? '已接管' : '尚未接管';
+    this.el('led-status').textContent = state.ledStatus || (!connected
+      ? '連線時不會自動發送 LED 或螢幕封包。'
+      : !supported ? '此 HID 介面未宣告 0x80 輸出，無法接管 LED。'
+      : !state.ledEnabled ? '裝置已就緒。啟用接管後才能控制 Pad、按鍵與 Strip 燈光。' : '');
   }
 }

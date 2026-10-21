@@ -1,12 +1,21 @@
 import type { MidiMessage } from '@midiy/mikro-core';
+import type { MidiOutput, MidiStatus } from '../../runtime/contracts';
 
-export class WebMidiAdapter {
+export class WebMidiAdapter implements MidiOutput {
   access: WebMidi.MIDIAccess | null = null;
   output: WebMidi.MIDIOutput | null = null;
   private generation = 0;
   private selection: Promise<void> = Promise.resolve();
-  constructor(private readonly change: () => void, private readonly lost: () => MidiMessage[],
-    private readonly request: (() => Promise<WebMidi.MIDIAccess>) | undefined =
+  private change: () => void = () => {};
+  private lost: () => MidiMessage[] = () => [];
+  bind(change: () => void, lost: () => MidiMessage[]) { this.change = change; this.lost = lost; }
+  get status(): MidiStatus {
+    const port = (p: WebMidi.MIDIOutput) => ({ id: p.id, name: p.name || p.id });
+    return { enabled: Boolean(this.access),
+      ports: [...this.access?.outputs.values() ?? []].filter(p => p.state === 'connected').map(port),
+      output: this.output ? port(this.output) : null };
+  }
+  constructor(private readonly request: (() => Promise<WebMidi.MIDIAccess>) | undefined =
       typeof navigator !== 'undefined' && navigator.requestMIDIAccess ? () => navigator.requestMIDIAccess() : undefined) {}
   async enable(): Promise<void> {
     if (!this.request) throw new Error('此瀏覽器不支援 Web MIDI');
