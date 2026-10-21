@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#151515">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23191919'/%3E%3Cpath d='M12 48V16h8l12 17 12-17h8v32h-9V29L32 44 21 29v19z' fill='%23e8e8e2'/%3E%3C/svg%3E">
-  <title>Mapping · MPA</title>
+  <title>Mapping · MiDiY</title>
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./hardware-map.css">
   <link rel="stylesheet" href="./translator.css">
@@ -13,7 +13,7 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#mapping" aria-label="MPA Mapping"><span class="brand-mark">mpa<span>↗</span></span><span class="brand-divider"></span><span class="brand-device">MASCHINE MIKRO<small>MK3 CONTROL WORKSPACE</small></span></a>
+      <a class="brand" href="#mapping" aria-label="MiDiY Mapping"><span class="brand-mark">MiDiY<span>↗</span></span><span class="brand-divider"></span><span class="brand-device">MASCHINE MIKRO<small>MK3 CONTROL WORKSPACE</small></span></a>
       <div class="top-actions"><span id="device-status" class="status-pill">● 尚未連線</span><button id="connect" class="primary">連接裝置</button><button id="disconnect" class="ghost" disabled>中斷</button></div>
     </header>
     <nav class="page-nav" role="tablist" aria-label="工作區">
@@ -36,10 +36,10 @@
         <section id="testing-decoded" class="panel decoded-panel" aria-label="即時解碼"></section>
         <div class="workspace lower">
           <section class="panel log-panel"><div class="section-heading"><div><p class="eyebrow">LIVE INPUT</p><h2>原始封包</h2></div><div class="inline-actions"><label class="switch"><input id="pause-log" type="checkbox">暫停顯示</label><button id="clear-log" class="text-button">清除顯示</button></div></div><div class="table-wrap"><table><thead><tr><th>TIME</th><th>REPORT ID</th><th>LEN</th><th>CHANGED BYTES</th><th>RAW HEX</th></tr></thead><tbody id="report-rows"><tr><td colspan="5" class="table-empty">等待 HID Input Report…</td></tr></tbody></table></div><p class="caption">顯示最近 100 筆；session 會保留全部已錄製的報告。</p></section>
-          <section class="panel export-panel"><div class="section-heading"><div><p class="eyebrow">SESSION</p><h2>擷取記錄</h2></div></div><div id="capture-list" class="capture-list"><div class="list-empty">還沒有擷取記錄。</div></div><div class="export-actions"><button id="export-json" class="outline">匯出 Session</button><button id="export-csv" class="outline">匯出 CSV</button><label class="outline file-button" tabindex="0" role="button">匯入 Session<input id="import-json" type="file" accept="application/json,.json" hidden></label></div><button id="reset-session" class="text-button danger">清空工作階段</button><p class="caption">Session 包含原始報告與擷取分析，與 Mapping 設定檔分開保存。</p></section>
+          <section class="panel export-panel"><div class="section-heading"><div><p class="eyebrow">SESSION</p><h2>擷取記錄</h2></div><button id="reset-session" class="text-button danger">清空工作階段</button></div><div id="capture-list" class="capture-list"><div class="list-empty">還沒有擷取記錄。</div></div><div class="export-actions"><button id="export-json" class="outline">匯出 Session</button><button id="export-csv" class="outline">匯出 CSV</button><label class="outline file-button" tabindex="0" role="button">匯入 Session<input id="import-json" type="file" accept="application/json,.json" hidden></label></div></section>
         </div>
       </section>
-      <footer><span>MPA <span class="footer-divider">/</span> MASCHINE MIKRO MK3</span><span><a href="https://docs.native-instruments.com/ni-tech-manuals/maschine-mikro-mk3-manual/en/quick-reference" target="_blank" rel="noopener">硬體參照</a><a href="https://github.com/r00tman/maschine-mikro-mk3-driver" target="_blank" rel="noopener">協定來源</a></span></footer>
+      <footer><span>MiDiY <span class="footer-divider">/</span> MASCHINE MIKRO MK3</span><span><a href="https://docs.native-instruments.com/ni-tech-manuals/maschine-mikro-mk3-manual/en/quick-reference" target="_blank" rel="noopener">硬體參照</a><a href="https://github.com/r00tman/maschine-mikro-mk3-driver" target="_blank" rel="noopener">協定來源</a></span></footer>
     </main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>

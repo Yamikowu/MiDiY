@@ -16,7 +16,7 @@ let translator = null;
 let recordingFull = false;
 
 function freshSession() {
-  return { schema: 'mpa-session-v1', appVersion: '1.0.0', createdAt: new Date().toISOString(), device: null, reports: [], captures: [] };
+  return { schema: 'midiy-session-v1', appVersion: '1.0.0', createdAt: new Date().toISOString(), device: null, reports: [], captures: [] };
 }
 
 function escapeHtml(value) {
@@ -155,7 +155,7 @@ function download(filename, contents, type) {
 }
 
 function exportJson() {
-  download(`mpa-session-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, JSON.stringify(session, null, 2), 'application/json');
+  download(`midiy-session-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, JSON.stringify(session, null, 2), 'application/json');
 }
 
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
@@ -165,7 +165,7 @@ function exportCsv() {
     const candidates = capture.candidates || summarizeCapture(capture);
     for (const candidate of candidates) rows.push([capture.id,capture.controlId,getControl(capture.controlId)?.label || '',capture.startedAt,capture.samples.length,`0x${hex(candidate.reportId)}`,candidate.offset,candidate.count,candidate.values.map(hex).join(' '),capture.note]);
   }
-  download('mpa-candidates.csv', rows.map(row => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+  download('midiy-candidates.csv', rows.map(row => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 
 async function importJson(file) {

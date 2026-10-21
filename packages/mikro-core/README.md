@@ -1,15 +1,15 @@
-# @mpa/mikro-core
+# @midiy/mikro-core
 
 Portable Mikro MK3 HID decoder, MIDI mapping engine, profile validation and Pad
 LED encoder. ESM + TypeScript declarations; no DOM, navigator, clock or storage
-dependency. Build with `npm run build:core` from the MPA root. Reuse the package
-directory as a local npm dependency; `npm pack --workspace @mpa/mikro-core` produces
+dependency. Build with `npm run build:core` from the MiDiY root. Reuse the package
+directory as a local npm dependency; `npm pack --workspace @midiy/mikro-core` produces
 a distributable package after building. This package and its adapted protocol
 code are MIT licensed; include LICENSE when redistributing or porting.
 
 ```ts
 import { InputDecoder, MappingEngine, createDefaultProfile, encodePadLights }
-  from '@mpa/mikro-core';
+  from '@midiy/mikro-core';
 
 const decoder = new InputDecoder();
 const engine = new MappingEngine(createDefaultProfile());
@@ -35,13 +35,14 @@ respectively, with configurable step and full-swipe resolution; first touch
 establishes a baseline. Transitions between zero and nonzero generate independent Touch
 button events for MIDI mapping.
 
-`Profile` has schema `mpa-profile-v1`, name, initialModeId, and modes containing
+`Profile` has schema `midiy-profile-v1`, name, initialModeId, and modes containing
 stable ControlId bindings and 16 physical Pad 1–16 light settings. Channels are
 1–16, Note/CC/Program values are 0–127. Bindings are discriminated unions exported
 in the declarations: none, note (Gate/Toggle), cc (Gate/Toggle/Trigger/Inc/encoder/strip),
 button-value (Poly/Channel Pressure, Program, Pitchbend), strip-position, value,
 system, program, mode. `parseProfile(unknown)` validates
-before use and returns a detached copy.
+before use and returns a detached copy. Legacy `mpa-profile-v1` files remain
+importable and are normalized to the MiDiY schema.
 Port identifiers, browser objects and application callbacks do not belong here.
 
 `MappingEngine.process()` returns MIDI byte arrays and a modeChanged flag. Pad

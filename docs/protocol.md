@@ -2,7 +2,7 @@
 
 Source of protocol logic: r00tman/maschine-mikro-mk3-driver revision
 `30f9b6013f3559dc1774d3ddb82affabd376692a`. Source of physical Pad numbering:
-MPA's existing 2026-10-19 captures, checked against all sixteen Pad captures.
+MiDiY's existing 2026-10-19 captures, checked against all sixteen Pad captures.
 Retain `THIRD_PARTY_NOTICES.md` and the core LICENSE when porting.
 
 ## Input
@@ -28,7 +28,7 @@ Device Pad indices run from the top-left across rows: 0–3 correspond to physic
 Pad 13–16, then 4–7 to Pad 9–12, 8–11 to Pad 5–8, 12–15 to Pad 1–4.
 All button bit names and stable IDs are exported as `BUTTON_IDS`.
 
-Rust only prints Encoder raw values; no modulus is established. MPA emits raw
+Rust only prints Encoder raw values; no modulus is established. MiDiY emits raw
 subtraction and lets profiles specify a modulus (0 means none). For the Strip,
 the user-confirmed physical values are 0 on release, 1 at the left edge, and
 200 at the right edge. A stationary touch produced a nonzero position followed
@@ -66,7 +66,7 @@ local HID actions (Controller Editor's For MIDI Out behavior); external MIDI In
 feedback is not implemented.
 
 The browser adapter validates the selected interface's output descriptor and
-serializes writes. MPA coalesces pending light updates, only sends on state
+serializes writes. MiDiY coalesces pending light updates, only sends on state
 changes, and does not send on initial connection. Enabling LED takeover writes
 the entire state, so another application's light state cannot be preserved.
 Manual disconnect and `pagehide` (reload/navigation/close) share an idempotent

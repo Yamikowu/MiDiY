@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   InputDecoder, MappingEngine, BUTTON_IDS, PAD_IDS, padIndexToNumber, padNumberToIndex,
   createDefaultProfile, createMode, parseProfile, encodePadLights, encodeLights, type InputEvent
-} from '@mpa/mikro-core';
+} from '@midiy/mikro-core';
 
 const pad = (event: 'note-on' | 'note-off' | 'press-on' | 'press-off' | 'aftertouch', raw = 2048, number = 1): InputEvent => ({
   kind: 'pad', controlId: `PAD_${number}`, padIndex: padNumberToIndex(number), event, raw, velocity: raw >> 5
@@ -347,6 +347,7 @@ test('Strip Position CC supports Absolute, Relative and Relative (Offset)', () =
 test('profile round-trip is detached and rejects values that could generate invalid MIDI', () => {
   const profile = createDefaultProfile(), parsed = parseProfile(JSON.parse(JSON.stringify(profile)));
   assert.deepEqual(parsed, profile); parsed.name = 'other'; assert.notEqual(parsed.name, profile.name);
+  assert.equal(parseProfile({ ...profile, schema: 'mpa-profile-v1' }).schema, 'midiy-profile-v1');
   for (const binding of [ { type: 'note', channel: 0, note: 36, velocity: 100 }, { type: 'note', channel: 1, note: 128, velocity: 100 }, { type: 'mode', modeId: 'missing' }, { type: 'arbitrary' } ]) {
     const p = createDefaultProfile(); p.modes[0].bindings.PLAY = binding as any; assert.throws(() => parseProfile(p));
   }

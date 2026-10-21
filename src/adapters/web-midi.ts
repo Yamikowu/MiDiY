@@ -1,4 +1,4 @@
-import type { MidiMessage } from '@mpa/mikro-core';
+import type { MidiMessage } from '@midiy/mikro-core';
 
 export class WebMidiAdapter {
   access: WebMidi.MIDIAccess | null = null;

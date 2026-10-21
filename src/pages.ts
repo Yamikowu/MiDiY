@@ -9,7 +9,7 @@ export function mountPages(): void {
       tab.tabIndex = active ? 0 : -1;
       document.getElementById(`page-${tab.dataset.page}`)!.hidden = !active;
     }
-    document.title = `${page === 'testing' ? 'Testing' : 'Mapping'} · MPA`;
+    document.title = `${page === 'testing' ? 'Testing' : 'Mapping'} · MiDiY`;
   };
   tabs.forEach((tab, index) => tab.addEventListener('keydown', event => {
     let next: number;

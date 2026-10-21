@@ -2,7 +2,7 @@ import {
   PAD_VELOCITY_CURVES, type PadVelocityCurve, InputDecoder, MappingEngine, createDefaultProfile, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
   encodePadLights, encodeLights, type Binding, type Brightness, type ButtonLightId, type ControlId, type Profile, type InputEvent, type MidiMessage,
   type PadLight, type OutputReport, type PressureBinding, type StripLightMode
-} from '@mpa/mikro-core';
+} from '@midiy/mikro-core';
 import { WebHidAdapter, outputReports } from './adapters/web-hid';
 import { WebMidiAdapter } from './adapters/web-midi';
 import { renderHardware } from './hardware-view.js';
@@ -96,10 +96,9 @@ export class TranslatorUI {
     this.el('panel').innerHTML = `
       <section class="config-panel" aria-label="設定檔與模式">
         <div class="config-row">
-          <label class="config-picker">設定檔<select id="midi-library" aria-label="選擇設定檔"></select><input id="midi-profile-name" maxlength="80" aria-label="編輯設定檔名稱" hidden></label>
+          <label class="config-picker"><span class="config-picker-heading">設定檔 <span id="midi-save-status" class="save-status" role="status"></span></span><select id="midi-library" aria-label="選擇設定檔"></select><input id="midi-profile-name" maxlength="80" aria-label="編輯設定檔名稱" hidden></label>
           <div class="config-actions"><button id="midi-profile-edit" class="outline">編輯</button><button id="midi-profile-duplicate" class="outline">複製</button><button id="midi-save" class="primary" hidden>儲存</button><button id="midi-profile-delete" class="text-button danger" hidden>刪除</button></div>
           <div class="profile-file-actions"><button id="midi-export" class="text-button">匯出</button><label class="text-button file-button" tabindex="0" role="button">匯入<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
-          <p id="midi-save-status" class="save-status" role="status"></p>
         </div>
         <div class="config-row">
           <label class="config-picker">模式<select id="midi-mode" aria-label="選擇模式"></select><input id="midi-mode-name" maxlength="80" aria-label="編輯模式名稱" hidden></label>
@@ -257,7 +256,7 @@ export class TranslatorUI {
       if (this.editingMode) return this.options.toast('請先儲存模式名稱。');
       if (!this.applyPending()) return;
       const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(this.profile, null, 2)], { type: 'application/json' }));
-      a.href = url; a.download = 'mpa-profile.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      a.href = url; a.download = 'midiy-profile.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     this.el('import').addEventListener('change', event => this.guard(async () => {
       const input = event.target as HTMLInputElement, file = input.files?.[0]; input.value = '';

@@ -15,7 +15,7 @@
 - 兩頁各自顯示參照圖及編輯內容；Testing 選取 Shift 不會改動 Mapping 的 Pad 選取。
 - Mapping 修改 Pad 2 為 Note 60 後，切換 Testing 再返回，表單草稿仍在。
 - 將草稿另存為 Studio，圖上更新 Note 60；重新整理後仍可載入。原 Mikro MIDI 的 Pad 2 仍為 Note 37。
-- 設定匯出為 `mpa-profile.json`，再選取同一檔案匯入，顯示正確名稱與尚未儲存狀態。
+- 當時設定匯出為 `mpa-profile.json`，再選取同一檔案匯入，顯示正確名稱與尚未儲存狀態；目前匯出名稱為 `midiy-profile.json`。
 - 切換設定檔前取消提示，名稱草稿保留；選擇捨棄後，載入原設定檔。單鍵草稿的取消／捨棄亦確認。
 - Testing 匯入舊 Session，顯示 3,188 reports、72 captures、58/58 coverage，以及 Pad 1 的候選分析。
 - 390px 窄視窗下，頁面沒有水平溢出；參照圖可獨立水平捲動，編輯器排在下方。

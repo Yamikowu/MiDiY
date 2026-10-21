@@ -38,7 +38,7 @@ export function summarizeCapture(capture) {
 }
 
 export function normalizeImport(value) {
-  if (!value || value.schema !== 'mpa-session-v1' || !Array.isArray(value.captures) || !Array.isArray(value.reports)) throw new Error('不是有效的 MPA v1 工作階段檔案。');
+  if (!value || !['midiy-session-v1', 'mpa-session-v1'].includes(value.schema) || !Array.isArray(value.captures) || !Array.isArray(value.reports)) throw new Error('不是有效的 MiDiY v1 工作階段檔案。');
   if (value.reports.length > 100000) throw new Error('工作階段超過 100,000 筆報告上限。');
   const validReport = report => Number.isInteger(report?.reportId) && report.reportId >= 0 && report.reportId <= 255 && Array.isArray(report.bytes) && report.bytes.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255);
   for (const report of value.reports) {
@@ -48,5 +48,5 @@ export function normalizeImport(value) {
     if (!capture || typeof capture.id !== 'string' || typeof capture.controlId !== 'string' || !Array.isArray(capture.samples) || !capture.samples.every(validReport) || !capture.baseline || typeof capture.baseline !== 'object' || Object.values(capture.baseline).some(bytes => !Array.isArray(bytes) || bytes.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255))) throw new Error('工作階段含有無效擷取記錄。');
     capture.candidates = summarizeCapture(capture);
   }
-  return value;
+  return { ...value, schema: 'midiy-session-v1' };
 }

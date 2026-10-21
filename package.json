@@ -1,11 +1,11 @@
 {
-  "name": "mikro-protocol-analyzer",
+  "name": "midiy",
   "version": "2.0.0",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
   "scripts": {
-    "build:core": "npm run build --workspace @mpa/mikro-core",
+    "build:core": "npm run build --workspace @midiy/mikro-core",
     "prestart": "npm run build:core",
     "start": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "pretest": "npm run build:core",
@@ -14,7 +14,7 @@
     "build": "npm run build:core && npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
-  "dependencies": { "@mpa/mikro-core": "*" },
+  "dependencies": { "@midiy/mikro-core": "*" },
   "devDependencies": {
     "@types/w3c-web-hid": "^1.0.6",
     "@types/webmidi": "^2.0.10",

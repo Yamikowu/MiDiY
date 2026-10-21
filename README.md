@@ -1,4 +1,4 @@
-# Mikro Protocol Analyzer (MPA)
+# MiDiY
 
 Maschine Mikro MK3 的 WebHID 協定分析工具與可設定 MIDI 翻譯器。協定直接移植自
 [r00tman 的 Rust 開源驅動](https://github.com/r00tman/maschine-mikro-mk3-driver)，
@@ -40,8 +40,9 @@ Testing 的 Session 與 Mapping 的設定檔仍使用各自的格式和匯入／
 8. Pad Hit 的 Note 可設定輸出最小值／最大值（0–127，預設 0／127），先套用曲線再換算至此範圍；最小值不可大於最大值，相同值代表固定力度。有效 Note On 至少為 1，避免力度 0 被當成 Note Off。舊 Pad 固定力度保留，編輯時顯示為相同的最小值／最大值。一般按鍵與 Strip Touch 的 Note 不顯示力度欄位，載入及輸出統一使用 127。Note 摘要一律顯示 Gate／Toggle。
 
 Pad 色彩與亮度選取後會立即在參照圖預覽；這只改網頁外觀，不會寫入裝置或儲存。控制項表單的變更只有按「套用至目前模式」後才保存；已接管燈光時，也會更新裝置。切換控制項前會提示未套用的表單。匯出會驗證並套用目前控制項尚未套用的表單。
-舊版瀏覽器中單份 `mpa-profile-v1` 設定會自動讀入；命名清單使用獨立的
-`mpa-profile-library-v1` 儲存，不會寫入可攜 JSON，也不會修改原始 Session。
+瀏覽器設定檔清單使用 `midiy-profile-library-v1` 儲存；單份設定使用
+`midiy-profile-v1`，不會把清單資料寫入可攜 JSON。舊版 `mpa-profile-v1`
+與 `mpa-profile-library-v1` 仍可讀取；下次儲存時寫入新名稱的儲存鍵，舊資料不會被刪除。
 
 16 個 Pad 的 Hit 可選 Note、CC、Poly Pressure、Channel Pressure、Program Change 或 Pitchbend。Note 有 Gate／Toggle；
 其餘五種提供 Gate／Toggle／Trigger／Inc。Pad Hit 沒有 Action on，Press 的壓力映射獨立設定。
@@ -75,7 +76,7 @@ Koala 可接收同一 IAC bus；將 MIDI Channel 設為 1 或 ALL，MIDI Note Of
 Koala Pad 需用 Note；其他控制項可依 App 支援映射 CC。
 [Koala MIDI 設定](https://manual.koalasampler.com/mobile/8-settings/)。
 本次已透過 IAC 實測收到 Note 36 與 CC119（按下 127、放開 0），見[實測紀錄](docs/verification/README.md)。
-MPA 不會建立虛擬 MIDI 埠，也不會自動改動 App 的 MIDI map。
+MiDiY 不會建立虛擬 MIDI 埠，也不會自動改動 App 的 MIDI map。
 
 ## Pad、按鍵與 Strip LED
 
@@ -90,11 +91,13 @@ Pad 與 Strip 可使用 Off + 17 種列舉色，非任意 RGB；按鍵使用亮�
 ## 原始擷取與相容性
 
 逐項擷取、baseline、變動位元組分析、JSON 匯入／匯出及候選 CSV 均保留。
-`mpa-session-v1` 的 payload 仍不含 report ID，偏移從 0 開始。原始報告上限 100,000；
+`midiy-session-v1` 的 payload 仍不含 report ID，偏移從 0 開始。舊版 `mpa-session-v1`
+仍可匯入。原始報告上限 100,000；
 達到上限會停止新增錄製資料，MIDI 轉譯繼續。顯示最多 100 筆；清除顯示不會刪除工作階段。
 擷取資料不會自動儲存，重新整理前請先匯出。
 
-MIDI 設定使用獨立 `mpa-profile-v1`，模式／控制項 ID／MIDI bytes／Pad 色盤可攜；
+MIDI 設定使用獨立 `midiy-profile-v1`，也可匯入舊版 `mpa-profile-v1`。
+模式／控制項 ID／MIDI bytes／Pad 色盤可攜；
 MIDI 埠 ID、瀏覽器物件不寫入設定檔。原始工作階段與 MIDI 設定用不同的匯入按鈕。
 
 ## 核心重用與硬體移植

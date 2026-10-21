@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BUTTON_IDS, type OutputReport } from '@mpa/mikro-core';
+import { BUTTON_IDS, type OutputReport } from '@midiy/mikro-core';
 import { TranslatorUI } from '../src/translator.ts';
 
 // Keep the real constructor, lifecycle listener, release and HID queue; replace DOM rendering.

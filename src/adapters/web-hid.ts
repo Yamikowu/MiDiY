@@ -1,4 +1,4 @@
-import { VENDOR_ID, PRODUCT_ID, type OutputReport } from '@mpa/mikro-core';
+import { VENDOR_ID, PRODUCT_ID, type OutputReport } from '@midiy/mikro-core';
 
 export function outputReports(collections: readonly HIDCollectionInfo[]): HIDReportInfo[] {
   return collections.flatMap(c => [...(c.outputReports ?? []), ...outputReports(c.children ?? [])]);

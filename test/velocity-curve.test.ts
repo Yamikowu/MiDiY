@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyPadVelocityCurve, PAD_VELOCITY_CURVES, MappingEngine, createDefaultProfile, parseProfile,
   type InputEvent
-} from '@mpa/mikro-core';
+} from '@midiy/mikro-core';
 import { ProfileLibrary } from '../src/profile-library.ts';
 
 const hit = (velocity: number): InputEvent => ({ kind: 'pad', controlId: 'PAD_1', padIndex: 12,

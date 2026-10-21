@@ -4,10 +4,11 @@
 .translator-panel label:not(.switch):not(.file-button) { display: grid; gap: 8px; font-size: 10px; color: var(--muted); }
 .translator-panel select, .translator-panel input:not([type=checkbox]):not([type=file]) { width: 100%; }
 .config-picker { min-width: 0; }
+.config-picker-heading { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
 .config-actions, .profile-file-actions { display: flex; align-items: center; gap: 8px; }
 .profile-file-actions, .default-switch { justify-self: end; }
 .default-switch { white-space: nowrap; min-height: 38px; }
-.save-status { grid-column: 1 / -1; margin: 0; color: var(--quiet); font-size: 9px; line-height: 1.6; }
+.save-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--quiet); font-size: 9px; }
 .config-panel [hidden] { display: none !important; }
 .unsaved { color: var(--accent) !important; }
 .page-heading-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex: none; min-width: 0; }

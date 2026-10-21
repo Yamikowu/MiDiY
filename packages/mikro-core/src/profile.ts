@@ -40,23 +40,23 @@ export interface Mode {
 }
 export const PAD_VELOCITY_CURVES = ['soft-3', 'soft-2', 'soft-1', 'linear', 'hard-1', 'hard-2', 'hard-3'] as const;
 export type PadVelocityCurve = typeof PAD_VELOCITY_CURVES[number];
-export interface Profile { schema: 'mpa-profile-v1'; name: string; initialModeId: string; modes: Mode[]; padVelocityCurve?: PadVelocityCurve }
+export interface Profile { schema: 'midiy-profile-v1'; name: string; initialModeId: string; modes: Mode[]; padVelocityCurve?: PadVelocityCurve }
 export function createMode(id: string, name: string): Mode {
   return { id, name, bindings: {}, pads: PAD_IDS.map(() => ({ color: 11, brightness: 'dim' })) };
 }
 export function createDefaultProfile(): Profile {
   const mode = createMode('default', 'Default');
   PAD_IDS.forEach((id, i) => { mode.bindings[id] = { type: 'note', channel: 1, note: 36 + i, velocity: 'pad' }; });
-  return { schema: 'mpa-profile-v1', name: 'Mikro MIDI', initialModeId: mode.id, modes: [mode] };
+  return { schema: 'midiy-profile-v1', name: 'Mikro MIDI', initialModeId: mode.id, modes: [mode] };
 }
 const byte = (n: unknown): n is number => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 127;
 const channel = (n: unknown) => Number.isInteger(n) && Number(n) >= 1 && Number(n) <= 16;
 /** Validate imported data before it can generate MIDI or device output. Returns a detached copy. */
 export function parseProfile(value: unknown): Profile {
-  const fail = (): never => { throw new Error('無效的 mpa-profile-v1 設定檔'); };
+  const fail = (): never => { throw new Error('無效的 MiDiY v1 設定檔'); };
   if (!value || typeof value !== 'object') return fail();
-  const p = value as Profile;
-  if (p.schema !== 'mpa-profile-v1' || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.modes) || !p.modes.length || p.modes.length > 64) return fail();
+  const p = value as Profile & { schema: string };
+  if (!['midiy-profile-v1', 'mpa-profile-v1'].includes(p.schema) || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.modes) || !p.modes.length || p.modes.length > 64) return fail();
   if (p.padVelocityCurve !== undefined && !PAD_VELOCITY_CURVES.includes(p.padVelocityCurve)) return fail();
   const ids = p.modes.map(m => m?.id);
   if (new Set(ids).size !== ids.length || !ids.includes(p.initialModeId)) return fail();
@@ -149,6 +149,7 @@ export function parseProfile(value: unknown): Profile {
     }
   }
   const detached = JSON.parse(JSON.stringify(p)) as Profile;
+  detached.schema = 'midiy-profile-v1';
   // Earlier web profiles exposed Action on for Pad Hit. Keep them importable,
   // but Pad Hit always acts on the hit edge in the current editor.
   for (const mode of detached.modes) for (const pad of PAD_IDS) {
