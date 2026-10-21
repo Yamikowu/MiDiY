@@ -1,3 +1,4 @@
+import { toIssue, type Issue } from './issues';
 import { MappingEngine, createDefaultProfile, parseProfile, type Profile, type InputEvent,
   type MidiMessage, type OutputReport, type PadVelocityCurve } from '@midiy/mikro-core';
 import type { ControllerInput, MidiOutput, DeviceInfo, MidiStatus, RawReport } from './contracts';
@@ -6,7 +7,7 @@ import type { MikroDriver, PerformanceState } from '../devices/mikro-mk3/driver'
 export interface RuntimeSnapshot {
   device: DeviceInfo | null; midi: MidiStatus; activeModeId: string;
   activePads: string[]; pressedButtons: string[]; ledEnabled: boolean;
-  lightReport: OutputReport; ledStatus: string; midiCount: number;
+  lightReport: OutputReport; ledStatus: string; ledIssue: Issue | null; midiCount: number;
 }
 export type RuntimeEvent =
   | { type: 'state'; state: RuntimeSnapshot }
@@ -15,7 +16,7 @@ export type RuntimeEvent =
   | { type: 'mode' }
   | { type: 'midi'; messages: MidiMessage[]; delivered: boolean }
   | { type: 'diagnostic'; message: string }
-  | { type: 'error'; message: string }
+  | ({ type: 'error' } & Issue)
   | { type: 'disconnected' };
 
 type RuntimeListener = (event: RuntimeEvent) => void | Promise<void>;
@@ -33,6 +34,7 @@ export class TranslatorRuntime {
   private closing: Promise<void> | null = null;
   private connecting: Promise<DeviceInfo | null> | null = null;
   private ledStatus = '';
+  private ledIssue: Issue | null = null;
   private midiCount = 0;
   constructor(private readonly input: ControllerInput, private readonly output: MidiOutput,
     private readonly driver: MikroDriver, profile: Profile = createDefaultProfile()) {
@@ -42,7 +44,7 @@ export class TranslatorRuntime {
     });
     output.bind(() => this.publish(), () => {
       const messages = this.engine.flush();
-      this.emit({ type: 'error', message: 'MIDI 輸出埠已離線；已清除演奏狀態，接收端若仍有聲音請使用其 Panic。' });
+      this.emit({ type: 'error', code: 'midi_output_lost', message: 'MIDI 輸出埠已離線；已清除演奏狀態，接收端若仍有聲音請使用其 Panic。' });
       return messages;
     });
   }
@@ -64,13 +66,13 @@ export class TranslatorRuntime {
     return structuredClone({ device: this.input.info, midi: this.output.status,
       activeModeId: this.engine.activeModeId, activePads: [...this.performance.activePads],
       pressedButtons: [...this.performance.pressedButtons], ledEnabled: this.ledEnabled,
-      lightReport: this.driver.lights(mode, this.performance), ledStatus: this.ledStatus, midiCount: this.midiCount });
+      lightReport: this.driver.lights(mode, this.performance), ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount });
   }
   private publish() { this.emit({ type: 'state', state: this.snapshot }); }
   private dispatch(messages: MidiMessage[]) {
     let delivered = false;
     try { this.output.send(messages); delivered = Boolean(this.output.status.output); }
-    catch (error) { this.emit({ type: 'error', message: `MIDI 發送失敗：${String(error)}` }); }
+    catch (error) { this.emit({ type: 'error', code: 'midi_send_failed', detail: toIssue(error), message: `MIDI 發送失敗：${String(error)}` }); }
     if (delivered) this.midiCount += messages.length;
     if (messages.length) this.emit({ type: 'midi', messages, delivered });
   }
@@ -134,7 +136,7 @@ export class TranslatorRuntime {
       if (this.closing) await this.closing;
       if (this.input.info) return this.input.info;
       this.resetPerformance();
-      const device = await this.input.connect(); this.ledStatus = ''; this.publish(); return device;
+      const device = await this.input.connect(); this.ledStatus = ''; this.ledIssue = null; this.publish(); return device;
     })().finally(() => { this.connecting = null; });
     return this.connecting;
   }
@@ -144,7 +146,7 @@ export class TranslatorRuntime {
   setLedEnabled(enabled: boolean) {
     const supported = this.input.info?.outputReportIds.includes(this.driver.definition.input.preferredOutputReportId);
     const wasEnabled = this.ledEnabled;
-    this.stopLights(); this.ledStatus = '';
+    this.stopLights(); this.ledStatus = ''; this.ledIssue = null;
     this.ledEnabled = enabled && Boolean(supported) && !this.closing;
     if (this.ledEnabled) this.refreshLights();
     else if (wasEnabled && supported && this.input.info && !this.closing) this.queueReport(this.driver.allOff());
@@ -164,10 +166,14 @@ export class TranslatorRuntime {
       const report = this.pendingLed, generation = this.ledGeneration; this.pendingLed = null;
       try {
         await this.input.send(report);
-        if (generation === this.ledGeneration) this.ledStatus = `已送出 0x${report.reportId.toString(16)} / ${report.data.length} bytes。請確認實體燈光。`;
+        if (generation === this.ledGeneration) {
+          this.ledStatus = `已送出 0x${report.reportId.toString(16)} / ${report.data.length} bytes。請確認實體燈光。`;
+          this.ledIssue = { code: 'led_sent', message: this.ledStatus, params: { p0: report.reportId.toString(16), p1: report.data.length } };
+        }
       } catch (error) {
         if (generation === this.ledGeneration) {
           this.stopLights(); this.ledStatus = `LED 發送失敗：${String(error)}`;
+          this.ledIssue = { code: 'led_send_failed', message: this.ledStatus, detail: toIssue(error) };
         }
       }
       this.publish();
@@ -186,7 +192,7 @@ export class TranslatorRuntime {
     this.closing = (async () => {
       if (this.connecting) await this.connecting;
       await this.input.disconnect(reset);
-    })().finally(() => { this.closing = null; this.ledStatus = ''; this.publish(); });
+    })().finally(() => { this.closing = null; this.ledStatus = ''; this.ledIssue = null; this.publish(); });
     this.publish(); return this.closing;
   }
 }

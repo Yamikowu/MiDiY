@@ -23,6 +23,7 @@ app.js（組裝與瀏覽器生命週期）
 - `src/devices/mikro-mk3/`：裝置識別、控制項與擷取指引、Driver、網頁硬體圖。硬體圖依賴 DOM；Driver 不引用硬體圖。
 - `src/mapping/`：編輯草稿、預覽、匯入匯出與本機設定清單。只有套用才更新執行設定；力度曲線與共用燈光依既有操作立即儲存。
 - `src/research/`：CaptureSession 管理原始資料與擷取狀態，Testing UI 訂閱 Runtime；不需要 Mapping UI。
+- `src/i18n/`：繁中／英文顯示與語言偏好；只更新標記文字和 UI 摘要，不重建表單或 Runtime。
 - `src/shared/`：頁籤與對話框等網頁共用工具。
 - `packages/mikro-core/`：保留既有套件 API、Mikro 事件、Profile、映射演算法與編碼；沒有改成多裝置通用套件。
 
@@ -32,7 +33,7 @@ app.js（組裝與瀏覽器生命週期）
 
 Runtime 提供 connect／disconnect、enableMidi／selectOutput、applyProfile／switchMode、setVelocityCurve／updateFeedback、setLedEnabled／panic。一般套用保留引擎的 held-control 抑制規則；載入另一份 Profile 時以 restart 重建引擎。力度與共用回饋更新不釋放正在發聲的音符。
 
-`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MIDI 寫出事件表示送出呼叫完成，不能證明 DAW 已收到。
+`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MIDI 寫出事件表示送出呼叫完成，不能證明 DAW 已收到。錯誤事件與 LED 狀態另外提供語言無關的 code／params／detail，由網頁翻譯；Runtime 不引用語系字典。
 
 關閉先停止 LED producer、取消舊佇列、清音，再依接管狀態送最後全暗報告並關閉；重疊 disconnect 共用 Promise。pagehide 只做 best effort，瀏覽器不保證等待完成。輸出埠已消失時無法保證 Note Off 到達接收端。
 

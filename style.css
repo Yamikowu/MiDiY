@@ -162,3 +162,19 @@ footer a:hover { color: var(--text); }
 .confirm-dialog::backdrop { background: #0009; backdrop-filter: blur(3px); }
 .confirm-dialog p { color: var(--muted); font-size: 12px; line-height: 1.9; margin: 18px 0 24px; }
 .confirm-dialog .inline-actions { justify-content: flex-end; }
+
+/* Device identity and language are separate controls; the device slot can become a picker. */
+.header-identity { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.language-switch { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; }
+.language-switch button { min-height: 30px; padding: 0 9px; border: 0; border-radius: 3px; background: transparent; color: var(--quiet); font-size: 11px; font-weight: 650; letter-spacing: .02em; }
+.language-switch button.is-active { background: var(--text); color: var(--bg); }
+.language-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 680px) {
+  .header-identity { width: 100%; gap: 12px; }
+  .header-identity .brand-mark { font-size: 27px; }
+  .header-identity .brand-divider { height: 25px; }
+  .header-identity .brand-device { font-size: 9px; letter-spacing: .06em; }
+  .header-identity .brand-device small { font-size: 7px; letter-spacing: .05em; }
+  .language-switch { margin-left: auto; }
+  .language-switch button { padding: 0 7px; }
+}

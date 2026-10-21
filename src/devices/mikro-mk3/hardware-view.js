@@ -1,10 +1,11 @@
+import { t, attribute, labelMarkup, translateLabel } from '../../i18n/index';
 import { getControl } from './controls.js';
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // One physical layout, independently mounted in Testing and Mapping.
 function controlButton(id, extra = '', displayLabel = '') {
-  const control = getControl(id) ?? { label: 'Encoder 觸碰' };
-  return `<button type="button" class="hw-button ${extra}" data-control="${id}" aria-label="選取 ${escapeHtml(control.label)}" title="${escapeHtml(control.label)}">${extra === 'pad' ? `<span class="pad-label">${id.slice(4)}</span><span class="pad-assignment"></span>` : extra === 'touch' ? '' : escapeHtml(displayLabel || control.label)}</button>`;
+  const control = getControl(id) ?? { label: t('encoder_touch') };
+  return `<button type="button" class="hw-button ${extra}" data-control="${id}" ${attribute('aria-label', 'select_2', {p2: translateLabel(control.label)})} title="${escapeHtml(translateLabel(control.label))}">${extra === 'pad' ? `<span class="pad-label">${id.slice(4)}</span><span class="pad-assignment"></span>` : extra === 'touch' ? '' : labelMarkup(displayLabel || control.label)}</button>`;
 }
 
 export function renderHardware(target, onSelect, { includeEncoderTouch = false } = {}) {
@@ -14,7 +15,7 @@ export function renderHardware(target, onSelect, { includeEncoderTouch = false }
         <div class="device-upper">
           <div class="browser-zone">${controlButton('PROJECT', 'icon-key', '⦿')}${controlButton('FAVORITES', 'icon-key', '★')}${controlButton('BROWSER', 'icon-key', '☰')}</div>
           <div class="edit-zone">
-            <div class="display-encoder"><div class="screen" aria-label="螢幕示意"></div><div class="encoder-cluster">${controlButton('ENCODER_ROTATE', 'encoder', '↻')}${includeEncoderTouch ? controlButton('ENCODER_TOUCH', 'touch') : ''}${controlButton('ENCODER_PUSH', 'push', '●')}</div></div>
+            <div class="display-encoder"><div class="screen" ${attribute('aria-label', 'screen_preview', {})}></div><div class="encoder-cluster">${controlButton('ENCODER_ROTATE', 'encoder', '↻')}${includeEncoderTouch ? controlButton('ENCODER_TOUCH', 'touch') : ''}${controlButton('ENCODER_PUSH', 'push', '●')}</div></div>
             <div class="quick-edit">${['VOLUME','SWING','TEMPO'].map(id => controlButton(id)).join('')}</div>
             <div class="edit-tools">${controlButton('PLUG_IN')}${controlButton('SAMPLING')}<div class="arrows">${controlButton('ARROW_LEFT', '', '◀')}${controlButton('ARROW_RIGHT', '', '▶')}</div></div>
           </div>
@@ -28,5 +29,13 @@ export function renderHardware(target, onSelect, { includeEncoderTouch = false }
   target.addEventListener('click', event => {
     const button = event.target.closest('[data-control]');
     if (button && target.contains(button)) onSelect(button.dataset.control);
+  });
+}
+
+export function refreshHardwareLabels(target) {
+  target.querySelectorAll('[data-control]').forEach(button => {
+    const label = translateLabel(getControl(button.dataset.control)?.label ?? button.dataset.control);
+    button.title = label;
+    button.setAttribute('aria-label', t('select', { p0: label }));
   });
 }

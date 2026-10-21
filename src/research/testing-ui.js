@@ -1,12 +1,14 @@
+import { t, l, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import { controls, getControl } from '../devices/mikro-mk3/controls.js';
 import { hex, reportHex, summarizeCapture, normalizeImport } from './analysis.js';
-import { renderHardware } from '../devices/mikro-mk3/hardware-view.js';
+import { renderHardware, refreshHardwareLabels } from '../devices/mikro-mk3/hardware-view.js';
 import { CaptureSession, MAX_REPORTS } from './capture-session.js';
 
 export function mountTesting(runtime, toast) {
   const $ = id => document.getElementById(id);
   const model = new CaptureSession();
   let selected = 'PAD_1';
+  let displayedCapture = null;
   let device = runtime.snapshot.device;
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -16,8 +18,8 @@ export function mountTesting(runtime, toast) {
     if (!getControl(id) || model.activeCapture) return;
     selected = id;
     const control = getControl(id);
-    $('selected-name').textContent = control.label;
-    $('selected-instruction').textContent = control.instruction;
+    $('selected-name').textContent = translateLabel(control.label);
+    $('selected-instruction').textContent = translateLabel(control.instruction);
     $('hardware').querySelectorAll('[data-control]').forEach(button => {
       button.classList.toggle('selected', button.dataset.control === id);
       button.setAttribute('aria-pressed', String(button.dataset.control === id));
@@ -31,7 +33,7 @@ export function mountTesting(runtime, toast) {
     $('stop-capture').disabled = !model.activeCapture;
     $('capture-indicator').textContent = model.activeCapture ? '● RECORDING' : 'READY';
     $('capture-indicator').classList.toggle('recording', Boolean(model.activeCapture));
-    $('metric-device').textContent = connected ? '已連線' : '等待連線';
+    $('metric-device').textContent = connected ? t('connected_2') : t('waiting_for_connection');
     $('metric-reports').textContent = model.session.reports.length.toLocaleString();
     $('metric-captures').textContent = String(model.session.captures.length);
     $('metric-coverage').textContent = `${new Set(model.session.captures.filter(capture => capture.samples.length).map(capture => capture.controlId)).size} / ${controls.length}`;
@@ -44,7 +46,7 @@ export function mountTesting(runtime, toast) {
     if (!result.recorded) {
       if (result.firstFull) {
         if (model.activeCapture) stopCapture();
-        toast('錄製已達 100,000 筆上限；MIDI 轉譯繼續運作。請匯出後清空工作階段。'); updateUI();
+        toast(t('recording_reached_100_000_reports_midi_translation_continues_export_and')); updateUI();
       }
       return;
     }
@@ -53,14 +55,14 @@ export function mountTesting(runtime, toast) {
   }
 
   function renderReportRows() {
-    $('report-rows').innerHTML = model.displayRows.length ? model.displayRows.map(record => `<tr><td>${escapeHtml(new Date(record.time).toLocaleTimeString('zh-TW', { hour12: false, fractionalSecondDigits: 3 }))}</td><td>0x${hex(record.reportId)}</td><td>${record.bytes.length}</td><td>${record.changedOffsets.length ? record.changedOffsets.map(offset => `+${offset}`).join(', ') : '—'}</td><td class="raw">${reportHex(record.bytes)}</td></tr>`).join('') : '<tr><td colspan="5" class="table-empty">等待 HID Input Report…</td></tr>';
+    $('report-rows').innerHTML = model.displayRows.length ? model.displayRows.map(record => `<tr><td>${escapeHtml(new Date(record.time).toLocaleTimeString(getLocale(), { hour12: false, fractionalSecondDigits: 3 }))}</td><td>0x${hex(record.reportId)}</td><td>${record.bytes.length}</td><td>${record.changedOffsets.length ? record.changedOffsets.map(offset => `+${offset}`).join(', ') : '—'}</td><td class="raw">${reportHex(record.bytes)}</td></tr>`).join('') : `<tr><td colspan="5" class="table-empty">${l('waiting_for_hid_input_report', {})}</td></tr>`;
   }
 
   function startCapture() {
     if (!device || model.activeCapture) return;
     model.start(selected);
     $('capture-result').className = 'result active';
-    $('capture-result').textContent = '正在記錄。請依照提示操作實體控制器，完成後按「停止並分析」。';
+    $('capture-result').textContent = t('recording_follow_the_control_instructions_then_select_stop_analyze');
     updateUI();
   }
 
@@ -70,19 +72,20 @@ export function mountTesting(runtime, toast) {
     $('capture-note').value = '';
     renderCaptureResult(finished);
     updateUI();
-    toast(finished.samples.length ? `已保存 ${finished.samples.length} 筆報告。` : '擷取期間沒有收到 Input Report；可重新操作再試。');
+    toast(finished.samples.length ? t('saved_reports', {p0: finished.samples.length}) : t('no_input_reports_received_during_capture_try_the_action_again'));
   }
 
   function renderCaptureResult(capture) {
+    displayedCapture = capture ?? null;
     const element = $('capture-result');
-    if (!capture) { element.className = 'result empty'; element.textContent = '連接裝置並完成一筆擷取後，這裡會顯示候選報告 ID 與位元組偏移。'; return; }
+    if (!capture) { element.className = 'result empty'; element.textContent = t('connect_a_device_and_complete_a_capture_to_see_candidate_report_ids_and'); return; }
     const candidates = capture.candidates || summarizeCapture(capture);
     element.className = 'result';
-    element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${capture.note ? `<p>操作備註：${escapeHtml(capture.note)}</p>` : ''}${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : '<p>沒有觀察到位元組變化。</p>'}`;
+    element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${capture.note ? `<p>${l('action_notes_2', {p0: capture.note})}</p>` : ''}${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : `<p>${l('no_byte_changes_observed', {})}</p>`}`;
   }
 
   function renderCaptureList() {
-    $('capture-list').innerHTML = model.session.captures.length ? [...model.session.captures].reverse().map(capture => `<button class="capture-item" data-capture="${escapeHtml(capture.id)}"><span><b>${escapeHtml(getControl(capture.controlId)?.label || capture.controlId)}</b><small>${escapeHtml(new Date(capture.startedAt).toLocaleString('zh-TW'))}${capture.note ? ` · ${escapeHtml(capture.note)}` : ''}</small></span><strong>${capture.samples.length} <small>reports</small></strong></button>`).join('') : '<div class="list-empty">還沒有擷取記錄。</div>';
+    $('capture-list').innerHTML = model.session.captures.length ? [...model.session.captures].reverse().map(capture => `<button class="capture-item" data-capture="${escapeHtml(capture.id)}"><span><b>${escapeHtml(translateLabel(getControl(capture.controlId)?.label || capture.controlId))}</b><small>${escapeHtml(new Date(capture.startedAt).toLocaleString(getLocale()))}${capture.note ? ` · ${escapeHtml(capture.note)}` : ''}</small></span><strong>${capture.samples.length} <small>reports</small></strong></button>`).join('') : `<div class="list-empty">${l('no_captures_yet', {})}</div>`;
   }
 
   function download(filename, contents, type) {
@@ -111,14 +114,14 @@ export function mountTesting(runtime, toast) {
   async function importJson(file) {
     try {
       const parsed = normalizeImport(JSON.parse(await file.text()));
-      if (!window.confirm('匯入會取代目前工作階段。請先匯出需要保留的資料。確定繼續？')) return;
+      if (!window.confirm(t('import_replaces_the_current_session_export_any_data_you_want_to_keep_fir'))) return;
       if (device) await runtime.disconnect();
       model.import(parsed);
       renderReportRows();
       renderCaptureResult(model.session.captures.findLast(capture => capture.controlId === selected));
       updateUI();
-      toast('已匯入工作階段。');
-    } catch (error) { toast(`匯入失敗：${error.message}`); }
+      toast(t('session_imported'));
+    } catch (error) { toast(t('import_failed', {p0: formatError(error)})); }
   }
 
   $('start-capture').addEventListener('click', startCapture);
@@ -128,23 +131,23 @@ export function mountTesting(runtime, toast) {
   $('export-json').addEventListener('click', exportJson);
   $('export-csv').addEventListener('click', exportCsv);
   $('import-json').addEventListener('change', event => { const file = event.target.files[0]; if (file) importJson(file); event.target.value = ''; });
-  $('reset-session').addEventListener('click', () => { if (!window.confirm('確定清空目前工作階段？尚未匯出的原始報告與擷取記錄都會移除。')) return; model.reset(); renderReportRows(); renderCaptureResult(); updateUI(); toast('工作階段已清空。'); });
+  $('reset-session').addEventListener('click', () => { if (!window.confirm(t('clear_this_session_all_unexported_reports_and_captures_will_be_removed'))) return; model.reset(); renderReportRows(); renderCaptureResult(); updateUI(); toast(t('session_cleared')); });
   $('capture-list').addEventListener('click', event => { const button = event.target.closest('[data-capture]'); if (!button || model.activeCapture) return; const capture = model.session.captures.find(item => item.id === button.dataset.capture); if (capture) { selectControl(capture.controlId); renderCaptureResult(capture); } });
   renderHardware($('hardware'), selectControl);
   selectControl(selected);
-  $('testing-decoded').innerHTML = `<div class="section-heading"><div><p class="eyebrow">DECODED INPUT</p><h2>即時解碼</h2></div><span id="midi-count" class="section-note">0 MIDI 訊息</span></div><label class="switch"><input id="midi-pressure-events" type="checkbox">顯示 Pad 壓力事件</label><pre id="midi-events" aria-live="off">等待控制器輸入…</pre>`;
+  $('testing-decoded').innerHTML = `<div class="section-heading"><div><p class="eyebrow">DECODED INPUT</p><h2>${l('decoded_input', {})}</h2></div><span id="midi-count" class="section-note">${l('0_midi_messages', {})}</span></div><label class="switch"><input id="midi-pressure-events" type="checkbox">${l('show_pad_pressure_events', {})}</label><pre id="midi-events" aria-live="off">${l('waiting_for_controller_input', {})}</pre>`;
   let rows = [], frame = 0;
   function addEvent(text) {
     rows.unshift(text); rows.length = Math.min(40, rows.length);
     if (!frame) frame = requestAnimationFrame(() => {
       frame = 0; $('midi-events').textContent = rows.join('\n');
-      $('midi-count').textContent = `${runtime.snapshot.midiCount} MIDI 訊息`;
+      $('midi-count').textContent = t('midi_messages', {p0: runtime.snapshot.midiCount});
     });
   }
   const unsubscribe = runtime.subscribe(event => {
     if (event.type === 'raw') onInput(event.report);
     else if (event.type === 'decoded' && (event.event.kind !== 'pad' || event.event.event !== 'aftertouch' || $('midi-pressure-events').checked)) addEvent(JSON.stringify(event.event));
-    else if (event.type === 'midi') addEvent(`${event.delivered ? 'MIDI →' : '預覽 MIDI'} ${event.messages.map(m => m.map(v => v.toString(16).padStart(2, '0')).join(' ')).join(' | ')}`);
+    else if (event.type === 'midi') addEvent(`${event.delivered ? 'MIDI →' : t('midi_preview')} ${event.messages.map(m => m.map(v => v.toString(16).padStart(2, '0')).join(' ')).join(' | ')}`);
     else if (event.type === 'diagnostic') addEvent(`⚠ ${event.message}`);
     else if (event.type === 'state') {
       const previous = device; device = event.state.device;
@@ -155,5 +158,16 @@ export function mountTesting(runtime, toast) {
     }
   });
   renderReportRows(); updateUI();
-  return () => { unsubscribe(); if (frame) cancelAnimationFrame(frame); };
+  const unsubscribeLocale = onLocaleChange(() => {
+    const control = getControl(selected);
+    $('selected-name').textContent = translateLabel(control.label);
+    $('selected-instruction').textContent = translateLabel(control.instruction);
+    refreshHardwareLabels($('hardware'));
+    updateUI();
+    if (!$('pause-log').checked) renderReportRows();
+    if (model.activeCapture) $('capture-result').textContent = t('recording_follow_the_control_instructions_then_select_stop_analyze');
+    else renderCaptureResult(displayedCapture);
+    $('midi-count').textContent = t('midi_messages', {p0: runtime.snapshot.midiCount});
+  });
+  return () => { unsubscribeLocale(); unsubscribe(); if (frame) cancelAnimationFrame(frame); };
 }

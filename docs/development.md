@@ -29,3 +29,11 @@ Session 保存 schema、appVersion、createdAt、device、reports、captures。�
 最多錄製 100,000 筆，達上限後停止收集並完成進行中的擷取，MIDI 轉譯繼續。畫面保留最近 100 筆；清除顯示不刪 Session。停止擷取後仍可記錄 Session 原始報告。Session 不自動儲存，重新整理前應匯出。
 
 JSON 匯出名稱維持 `midiy-session-<timestamp>.json`；候選 CSV 維持 `midiy-candidates.csv` 與既有欄位。候選分析表示操作期間觀察到變化，不等於協定已證實。錄製格式與 Mapping Profile 各自匯入匯出。
+
+## 網頁語系
+
+`src/i18n/` 維護 `zh-TW`／`en` 字典、語言選擇與顯示綁定。英文使用相同 MessageKey 型別，測試檢查兩語系的鍵與插值參數一致。語言偏好使用獨立的 `midiy-ui-language-v1` 儲存鍵，不加入 Profile 或 Session。
+
+文字模板使用 t；需要原地更新的 HTML 文字使用 l 或 data-i18n，屬性使用 attribute／data-i18n-aria-label 等綁定。表單標籤的 labelMarkup／labelAttributes 只處理程式定義的標籤，不可用於使用者名稱或備註。翻譯參數進入 HTML 時必須跳脫。
+
+切換語言不呼叫 renderBinding、重新掛載頁面或更新 Runtime 設定；語言回呼只刷新摘要與顯示。Runtime／Adapter 透過 `src/runtime/issues.ts` 的 code、params、detail 提供結構化診斷，UI 的 formatError 決定顯示語言；既有 message／ledStatus 留作相容資訊。核心協定、識別 ID 與匯出資料不因語言切換而改寫。

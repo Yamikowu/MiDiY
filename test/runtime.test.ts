@@ -69,6 +69,7 @@ test('LED write failure disables takeover and is exposed in state', async () => 
   input.send = async () => { throw new Error('write failed'); };
   runtime.setLedEnabled(true); await tick();
   assert.equal(runtime.snapshot.ledEnabled, false); assert.match(runtime.snapshot.ledStatus, /write failed/);
+  assert.equal(runtime.snapshot.ledIssue?.code, 'led_send_failed');
 });
 test('capture limits, display clearing, stop, reset and legacy imports stay separate from MIDI', async () => {
   const { runtime, input, midi } = fixture(); const research = new CaptureSession();

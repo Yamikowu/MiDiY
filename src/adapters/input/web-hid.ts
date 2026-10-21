@@ -1,3 +1,4 @@
+import { AppError } from '../../runtime/issues';
 import type { OutputReport } from '@midiy/mikro-core';
 import type { RawReport, DeviceInfo, InputSelection, ControllerInput } from '../../runtime/contracts';
 
@@ -29,7 +30,7 @@ export class WebHidAdapter implements ControllerInput {
   }
   async connect(): Promise<DeviceInfo | null> {
     if (this.closing) await this.closing;
-    if (!this.api) throw new Error('此瀏覽器不支援 WebHID');
+    if (!this.api) throw new AppError('webhid_unsupported', '此瀏覽器不支援 WebHID');
     if (this.device?.opened) return this.info;
     let devices = (await this.api.getDevices()).filter(d => d.vendorId === this.selection.vendorId && d.productId === this.selection.productId);
     if (!devices.length) devices = await this.api.requestDevice({ filters: [{ vendorId: this.selection.vendorId, productId: this.selection.productId }] });
@@ -41,19 +42,19 @@ export class WebHidAdapter implements ControllerInput {
     return this.info;
   }
   send(report: OutputReport): Promise<void> {
-    if (this.closing) return Promise.reject(new Error('HID 連線正在關閉'));
+    if (this.closing) return Promise.reject(new AppError('hid_closing', 'HID 連線正在關閉'));
     return this.enqueue(report);
   }
   private enqueue(report: OutputReport): Promise<void> {
     const device = this.device, generation = this.generation;
-    if (!device?.opened) return Promise.reject(new Error('HID 裝置尚未連線'));
+    if (!device?.opened) return Promise.reject(new AppError('hid_disconnected', 'HID 裝置尚未連線'));
     const descriptor = outputReports(device.collections).find(r => r.reportId === report.reportId);
-    if (!descriptor) return Promise.reject(new Error(`裝置未宣告 Output Report 0x${report.reportId.toString(16)}`));
+    if (!descriptor) return Promise.reject(new AppError('hid_output_unavailable', `裝置未宣告 Output Report 0x${report.reportId.toString(16)}`, { p0: report.reportId.toString(16) }));
     const bits = (descriptor.items ?? []).reduce((sum, item) => sum + (item.reportSize ?? 0) * (item.reportCount ?? 0), 0);
-    if (Math.ceil(bits / 8) !== report.data.length) return Promise.reject(new Error(`Output Report 長度不符：descriptor ${Math.ceil(bits / 8)} / payload ${report.data.length}`));
+    if (Math.ceil(bits / 8) !== report.data.length) return Promise.reject(new AppError('hid_length_mismatch', `Output Report 長度不符：descriptor ${Math.ceil(bits / 8)} / payload ${report.data.length}`, { p0: Math.ceil(bits / 8), p1: report.data.length }));
     const bytes = Uint8Array.from(report.data);
     const task = this.writes.catch(() => {}).then(async () => {
-      if (this.device !== device || generation !== this.generation || !device.opened) throw new Error('HID 連線已變更，取消舊輸出');
+      if (this.device !== device || generation !== this.generation || !device.opened) throw new AppError('hid_stale_write', 'HID 連線已變更，取消舊輸出');
       await device.sendReport(report.reportId, bytes);
     });
     this.writes = task;
