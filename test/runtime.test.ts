@@ -110,3 +110,114 @@ test('continuous pad pressure does not resend unchanged LED frames', async () =>
   input.report(2, [12, 72, 0]); input.report(2, [12, 74, 0]); await tick();
   assert.equal(input.sent.length, before);
 });
+
+const buttonReport = (...ids: string[]) => {
+  // Mikro 0x01 physical button bits: FAVORITES = 1, BROWSER = 2, SHIFT = 25.
+  const bytes = Array(13).fill(0);
+  for (const id of ids) { const bit = id === 'SHIFT' ? 25 : id === 'BROWSER' ? 2 : 1; bytes[bit >> 3] |= 1 << (bit % 8); }
+  return bytes;
+};
+test('SHIFT + FAVORITES toggles LED takeover once per press without MIDI, held-note loss or UI ownership', async () => {
+  const profile = createDefaultProfile();
+  profile.modes[0].bindings.FAVORITES = { type: 'note', channel: 1, note: 60, velocity: 100 };
+  const { runtime, input, midi } = fixture(profile);
+  const handled: string[] = [], raw: number[] = [];
+  runtime.subscribe(event => {
+    if (event.type === 'decoded' && event.handled) handled.push(`${event.event.controlId}:${event.event.kind === 'button' && event.event.pressed}`);
+    if (event.type === 'raw') raw.push(event.report.reportId);
+  });
+  await runtime.connect(); await runtime.selectOutput('a');
+  input.report(2, hit);
+  input.report(1, buttonReport('SHIFT'));
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, true); assert.ok(input.sent.length);
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, true);
+  // Releasing SHIFT first must not expose the shortcut's FAVORITES release to the engine.
+  input.report(1, buttonReport('FAVORITES')); input.report(1, buttonReport());
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, false);
+  assert.deepEqual([...input.sent.at(-1)!.data], Array(80).fill(0));
+  assert.deepEqual(midi.sent.map(entry => entry.message), [[0x90, 36, 64]]);
+  assert.deepEqual(handled, ['FAVORITES:true', 'FAVORITES:false', 'FAVORITES:true']);
+  assert.ok(raw.length >= 6);
+  input.report(2, release); assert.deepEqual(midi.sent.at(-1)!.message, [0x80, 36, 0]);
+});
+
+for (const actionOn of ['down', 'up'] as const) {
+  test(`standalone FAVORITES retains ${actionOn} mapping; shortcut consumes both edges`, async () => {
+    const profile = createDefaultProfile();
+    profile.modes[0].bindings.FAVORITES = { type: 'cc', channel: 1, controller: 8, style: 'trigger', value: 55, actionOn };
+    const { runtime, input, midi } = fixture(profile); await runtime.connect(); await runtime.selectOutput('a');
+    // FAVORITES first, then SHIFT: this is the original FAVORITES interaction, not a shortcut.
+    input.report(1, buttonReport('FAVORITES')); input.report(1, buttonReport('FAVORITES', 'SHIFT'));
+    assert.equal(runtime.snapshot.ledEnabled, false);
+    input.report(1, buttonReport());
+    assert.deepEqual(midi.sent.map(entry => entry.message), [[0xb0, 8, 55]]);
+    input.report(1, buttonReport('SHIFT', 'FAVORITES'));
+    input.report(1, buttonReport('FAVORITES')); input.report(1, buttonReport());
+    assert.equal(runtime.snapshot.ledEnabled, true);
+    assert.equal(midi.sent.length, 1);
+  });
+}
+
+test('shortcut uses existing report support and reconnect lifecycle without requiring a MIDI port', async () => {
+  const { runtime, input } = fixture(); await runtime.connect(); input.info!.outputReportIds = [];
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, false); assert.equal(input.sent.length, 0);
+  input.report(1, buttonReport()); input.info!.outputReportIds = [0x80];
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, true);
+  input.unplug(); await runtime.connect();
+  assert.equal(runtime.snapshot.ledEnabled, false);
+  input.report(1, buttonReport('SHIFT', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.ledEnabled, true);
+  await runtime.disconnect(); assert.deepEqual([...input.sent.at(-1)!.data], Array(80).fill(0));
+});
+
+for (const simultaneous of [false, true]) {
+  test(`SHIFT + BROWSER clears notes, LEDs and closes once (simultaneous ${simultaneous})`, async () => {
+    const profile = createDefaultProfile();
+    profile.modes[0].bindings.BROWSER = { type: 'note', channel: 1, note: 60, velocity: 100 };
+    const { runtime, input, midi } = fixture(profile);
+    const events: string[] = []; runtime.subscribe(event => events.push(event.type));
+    await runtime.connect(); await runtime.selectOutput('a'); runtime.setLedEnabled(true); await tick();
+    input.report(2, hit);
+    if (!simultaneous) input.report(1, buttonReport('SHIFT'));
+    input.report(1, buttonReport('SHIFT', 'BROWSER'));
+    const closing = runtime.disconnect(); assert.equal(runtime.disconnect(), closing);
+    input.report(1, buttonReport('SHIFT', 'BROWSER')); await closing; await tick();
+    assert.equal(input.closes, 1); assert.equal(runtime.snapshot.device, null);
+    assert.equal(runtime.snapshot.ledEnabled, false);
+    assert.deepEqual([...input.sent.at(-1)!.data], Array(80).fill(0));
+    assert.deepEqual(midi.sent.map(entry => entry.message), [[0x90, 36, 64], [0x80, 36, 0]]);
+    assert.equal(events.filter(type => type === 'disconnected').length, 1);
+    await runtime.connect(); assert.equal(runtime.snapshot.ledEnabled, false);
+    input.report(1, buttonReport('BROWSER')); input.report(1, buttonReport());
+    assert.deepEqual(midi.sent.slice(-2).map(entry => entry.message), [[0x90, 60, 127], [0x80, 60, 0]]);
+  });
+}
+
+test('BROWSER first retains original release action; disconnect wins over other same-report actions', async () => {
+  const profile = createDefaultProfile();
+  profile.modes[0].bindings.BROWSER = { type: 'cc', channel: 1, controller: 10, style: 'trigger', value: 70, actionOn: 'up' };
+  profile.modes[0].bindings.SHIFT = { type: 'note', channel: 1, note: 61, velocity: 100 };
+  const { runtime, input, midi } = fixture(profile); await runtime.connect(); await runtime.selectOutput('a');
+  input.report(1, buttonReport('BROWSER')); input.report(1, buttonReport('BROWSER', 'SHIFT'));
+  assert.ok(runtime.snapshot.device); input.report(1, buttonReport());
+  assert.ok(midi.sent.some(entry => entry.message.join() === '176,10,70'));
+  midi.sent.length = 0;
+  input.report(1, buttonReport('SHIFT', 'BROWSER', 'FAVORITES')); await tick();
+  assert.equal(runtime.snapshot.device, null); assert.equal(input.sent.length, 0); assert.equal(midi.sent.length, 0);
+});
+
+test('hardware disconnect errors are reported, with MIDI state cleared and no rejected background promise', async () => {
+  const { runtime, input, midi } = fixture(); const errors: string[] = [];
+  runtime.subscribe(event => { if (event.type === 'error') errors.push(event.code); });
+  await runtime.connect(); await runtime.selectOutput('a'); input.report(2, hit);
+  input.disconnect = async () => { input.info = null; throw new Error('close failed'); };
+  input.report(1, buttonReport('SHIFT', 'BROWSER')); await tick();
+  assert.deepEqual(errors, ['hid_disconnect_failed']);
+  assert.deepEqual(midi.sent.at(-1)!.message, [0x80, 36, 0]);
+  assert.equal(runtime.snapshot.ledEnabled, false);
+});

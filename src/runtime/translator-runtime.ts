@@ -12,7 +12,7 @@ export interface RuntimeSnapshot {
 export type RuntimeEvent =
   | { type: 'state'; state: RuntimeSnapshot }
   | { type: 'raw'; report: RawReport }
-  | { type: 'decoded'; event: InputEvent }
+  | { type: 'decoded'; event: InputEvent; handled?: boolean }
   | { type: 'mode' }
   | { type: 'midi'; messages: MidiMessage[]; delivered: boolean }
   | { type: 'diagnostic'; message: string }
@@ -28,6 +28,7 @@ export class TranslatorRuntime {
   private performance: PerformanceState = { activePads: new Set(), pressedButtons: new Set(), stripRaw: 0 };
   private listeners = new Set<RuntimeListener>();
   private ledEnabled = false;
+  private shortcutButtons = new Set<string>();
   private pendingLed: OutputReport | null = null;
   private writingLed = false;
   private ledGeneration = 0;
@@ -82,6 +83,21 @@ export class TranslatorRuntime {
   private receive(report: RawReport) {
     if (this.closing) return;
     const decoded = this.driver.decode(report);
+    // Use the completed report state, since FAVORITES precedes SHIFT in the device bit order.
+    const pressedButtons = new Set(this.performance.pressedButtons);
+    for (const event of decoded.events) if (event.kind === 'button') {
+      if (event.pressed) pressedButtons.add(event.controlId); else pressedButtons.delete(event.controlId);
+    }
+    // Disconnect takes priority over all other actions in the same report.
+    if (decoded.events.some(event => this.driver.shortcut(event, pressedButtons) === 'disconnect')) {
+      for (const event of decoded.events) this.emit({ type: 'decoded', event, handled: true });
+      for (const message of decoded.diagnostics) this.emit({ type: 'diagnostic', message });
+      this.emit({ type: 'raw', report });
+      void this.disconnect().then(() => this.emit({ type: 'disconnected' })).catch(error => {
+        this.emit({ type: 'error', code: 'hid_disconnect_failed', message: `無法關閉裝置：${String(error)}`, detail: toIssue(error) });
+      });
+      return;
+    }
     let lightsChanged = false;
     for (const event of decoded.events) {
       if (event.kind === 'pad') {
@@ -95,6 +111,19 @@ export class TranslatorRuntime {
         else this.performance.pressedButtons.delete(event.controlId);
       } else if (event.kind === 'strip') {
         this.performance.stripRaw = Math.max(0, Math.min(200, event.raw)); lightsChanged = true;
+      }
+      let handled = false;
+      if (event.kind === 'button') {
+        handled = this.shortcutButtons.has(event.controlId);
+        if (!event.pressed) this.shortcutButtons.delete(event.controlId);
+        else if (!handled && this.driver.shortcut(event, pressedButtons) === 'toggle-led') {
+          this.shortcutButtons.add(event.controlId); handled = true;
+          this.setLedEnabled(!this.ledEnabled);
+        }
+      }
+      if (handled) {
+        this.emit({ type: 'decoded', event, handled: true });
+        continue;
       }
       const result = this.engine.process(event); this.dispatch(result.messages);
       if (result.modeChanged) { lightsChanged = true; this.performance.activePads.clear(); this.emit({ type: 'mode' }); }
@@ -185,7 +214,7 @@ export class TranslatorRuntime {
     this.writingLed = false;
   }
   private resetPerformance() {
-    this.dispatch(this.engine.reset()); this.driver.reset();
+    this.dispatch(this.engine.reset()); this.driver.reset(); this.shortcutButtons.clear();
     this.performance.activePads.clear(); this.performance.pressedButtons.clear(); this.performance.stripRaw = 0;
   }
   panic() { this.resetPerformance(); this.refreshLights(); this.publish(); }

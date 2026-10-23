@@ -64,7 +64,7 @@ export class TranslatorUI {
         if (device !== deviceStatus) { deviceStatus = device; this.renderDevice(); }
         if (midi !== midiStatus) { midiStatus = midi; this.renderPorts(); }
         this.renderPressed(); this.queueModeLights(); this.previewBatch();
-      } else if (event.type === 'decoded') this.handleEvent(event.event);
+      } else if (event.type === 'decoded' && !event.handled) this.handleEvent(event.event);
       else if (event.type === 'mode') { this.pendingPaste = null; this.batchChanges = {}; this.bindingDirty = false; this.renderModes(); this.renderBinding(); this.renderMap(); }
     });
     onLocaleChange(() => {
@@ -126,6 +126,7 @@ export class TranslatorUI {
               <label>${l('idle_brightness_for_all_16_pads', {})}<select id="midi-pad-off-brightness"></select></label>
               <label>${l('pressed_brightness_for_all_16_pads', {})}<select id="midi-pad-on-brightness"></select></label>
             </div>
+            <p class="caption">${l('led_takeover_shortcut', {})}</p>
             <p class="caption">${l('changes_save_immediately_to_this_mode_button_brightness_only_affects_map', {})}</p>
           </details>
           <details class="device-options velocity-options" open><summary>${l('pad_velocity_curve', {})}</summary>

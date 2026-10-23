@@ -1,4 +1,4 @@
-import { InputDecoder, encodeLights, BUTTON_IDS, type Mode, type OutputReport } from '@midiy/mikro-core';
+import { InputDecoder, encodeLights, BUTTON_IDS, type Mode, type OutputReport, type InputEvent } from '@midiy/mikro-core';
 import type { RawReport } from '../../runtime/contracts';
 import { mikroDefinition } from './definition';
 
@@ -9,6 +9,11 @@ export class MikroDriver {
   private decoder = new InputDecoder();
   decode(report: RawReport) { return this.decoder.decode(report.reportId, report.data); }
   reset() { this.decoder.reset(); }
+  shortcut(event: InputEvent, pressedButtons: ReadonlySet<string>): 'toggle-led' | 'disconnect' | undefined {
+    if (event.kind !== 'button' || !event.pressed || !pressedButtons.has('SHIFT')) return;
+    if (event.controlId === 'FAVORITES') return 'toggle-led';
+    if (event.controlId === 'BROWSER') return 'disconnect';
+  }
   lights(mode: Mode, state: PerformanceState): OutputReport {
     const buttons = Object.fromEntries(BUTTON_IDS.slice(0, 39)
       .filter(id => { const b = mode.bindings[id]; return b && b.type !== 'none'; })
