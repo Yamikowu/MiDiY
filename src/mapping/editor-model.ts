@@ -30,7 +30,7 @@ export function defaultBinding(action: string, id: ControlId, modeId: string): B
   if (action === 'cc') return id === 'ENCODER_ROTATE'
     ? { type: 'cc', channel, controller: 1, style: 'encoder', step: 1, initial: 64, modulus: 0 }
     : id === 'SMART_STRIP' ? { type: 'cc', channel, controller: 1, style: 'strip', rawMin: 1, rawMax: 200, mode: 'absolute', from: 0, to: 127 }
-    : { type: 'cc', channel, controller: 1, style: 'momentary', on: 127, off: 0 };
+      : { type: 'cc', channel, controller: 1, style: 'momentary', on: 127, off: 0 };
   if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
     const output = action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend';
     return id === 'SMART_STRIP' ? { type: 'strip-position', channel, output, ...(output === 'poly-pressure' ? { note: 36 } : {}), from: 0, to: output === 'pitchbend' ? 16383 : 127 }
@@ -52,8 +52,9 @@ function bindingFields(binding: Binding | PressureBinding | undefined, pressure 
   number('channel', 'MIDI Channel', 1, 16); number('note', 'Note Number', 0, 127); number('controller', 'CC Number', 0, 127);
   if (binding.type === 'mode') result.modeId = { label: 'target_mode', value: b.modeId };
   if (binding.type === 'note') {
-    if (pressure) { number('velocity', 'trigger_velocity', 1, 127); number('onThreshold', 'trigger_threshold', 1, 100); number('offThreshold', 'release_threshold', 0, 99); }
-    else { choice('mode', 'Mode', ['gate', 'toggle'], 'gate');
+    if (pressure) { number('velocity', 'trigger_velocity', 1, 127); number('offThreshold', 'release_threshold', 0, 99); number('onThreshold', 'trigger_threshold', 1, 100); }
+    else {
+      choice('mode', 'Mode', ['gate', 'toggle'], 'gate');
       if (b.velocity === 'pad') { number('velocityMin', 'output_minimum', 0, 127, 0); number('velocityMax', 'output_maximum', 0, 127, 127); }
       else if (typeof b.velocity === 'number' && b.velocity !== 127) number('velocity', 'fixed_velocity_value', 1, 127);
     }
@@ -81,9 +82,9 @@ export function commonFields(profile: Profile, modeId: string, ids: readonly Con
   const fields: EditField[] = [];
   for (const section of sections) {
     const all = ids.map(id => section === 'pad' ? {
+      dual: { label: 'Color Mode', value: mode.pads[Number(id.slice(4)) - 1].onColor === undefined ? 'false' : 'true', options: enumOptions(['false', 'true']) },
       color: { label: 'idle_color_color_off', value: mode.pads[Number(id.slice(4)) - 1].color, min: 0, max: 17 },
-      onColor: { label: 'pressed_color_color_on', value: mode.pads[Number(id.slice(4)) - 1].onColor ?? mode.pads[Number(id.slice(4)) - 1].color, min: 0, max: 17 },
-      dual: { label: 'Color Mode', value: mode.pads[Number(id.slice(4)) - 1].onColor === undefined ? 'false' : 'true', options: enumOptions(['false', 'true']) }
+      onColor: { label: 'pressed_color_color_on', value: mode.pads[Number(id.slice(4)) - 1].onColor ?? mode.pads[Number(id.slice(4)) - 1].color, min: 0, max: 17 }
     } : bindingFields(section === 'hit' ? mode.bindings[id] : mode.pressureBindings?.[id as `PAD_${number}`], section === 'press'));
     for (const [key, field] of Object.entries(all[0])) {
       if (key === 'actionOn' && section === 'hit' && ids.some(isPadControl)) continue;
@@ -104,9 +105,9 @@ export function patchControls(profile: Profile, modeId: string, ids: readonly Co
       const action = changes.pressAction;
       (mode.pressureBindings ??= {})[id as `PAD_${number}`] = action === 'off' ? { type: 'off' }
         : action === 'note' ? { type: 'note', channel: 1, note: 36, velocity: 100, onThreshold: 20, offThreshold: 10 }
-        : action === 'cc' ? { type: 'cc', channel: 1, controller: 1, from: 0, to: 127 }
-        : action === 'poly-pressure' ? { type: 'poly-pressure', channel: 1, note: 36, from: 0, to: 127 }
-        : { type: action as 'channel-pressure' | 'pitchbend', channel: 1, from: 0, to: action === 'pitchbend' ? 100 : 127 };
+          : action === 'cc' ? { type: 'cc', channel: 1, controller: 1, from: 0, to: 127 }
+            : action === 'poly-pressure' ? { type: 'poly-pressure', channel: 1, note: 36, from: 0, to: 127 }
+              : { type: action as 'channel-pressure' | 'pitchbend', channel: 1, from: 0, to: action === 'pitchbend' ? 100 : 127 };
     }
     // Switching a mode must supply valid new fields without carrying incompatible old fields.
     for (const section of ['hit', 'press']) {
@@ -139,9 +140,11 @@ export function patchControls(profile: Profile, modeId: string, ids: readonly Co
 export interface ControlCopy { source: ControlId; binding?: Binding; pressure?: PressureBinding; pad?: Profile['modes'][number]['pads'][number]; touch?: Binding; strip?: Profile['modes'][number]['stripLight'] }
 export function copyControls(profile: Profile, modeId: string, ids: readonly ControlId[]): ControlCopy[] {
   const mode = profile.modes.find(m => m.id === modeId)!;
-  return orderedControls(ids).map(id => structuredClone({ source: id, binding: mode.bindings[id],
+  return orderedControls(ids).map(id => structuredClone({
+    source: id, binding: mode.bindings[id],
     ...(isPadControl(id) ? { pressure: mode.pressureBindings?.[id as `PAD_${number}`], pad: mode.pads[Number(id.slice(4)) - 1] } : {}),
-    ...(id === 'SMART_STRIP' ? { touch: mode.bindings.SMART_STRIP_TOUCH, strip: mode.stripLight } : {}) }));
+    ...(id === 'SMART_STRIP' ? { touch: mode.bindings.SMART_STRIP_TOUCH, strip: mode.stripLight } : {})
+  }));
 }
 export function pasteControls(profile: Profile, modeId: string, ids: readonly ControlId[], copies: readonly ControlCopy[]): Profile {
   const targets = orderedControls(ids);

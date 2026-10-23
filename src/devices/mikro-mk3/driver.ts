@@ -2,7 +2,7 @@ import { InputDecoder, encodeLights, BUTTON_IDS, type Mode, type OutputReport, t
 import type { RawReport } from '../../runtime/contracts';
 import { mikroDefinition } from './definition';
 
-export interface PerformanceState { activePads: Set<string>; pressedButtons: Set<string>; litButtons?: Set<string>; stripRaw: number }
+export interface PerformanceState { activePads: Set<string>; pressedButtons: Set<string>; litButtons?: Set<string>; stripRaw: number; stripLastRaw?: number }
 /** Mikro-specific protocol stays here; the existing public core API remains unchanged. */
 export class MikroDriver {
   readonly definition = mikroDefinition;
@@ -23,10 +23,14 @@ export class MikroDriver {
           : (binding.type === 'note' || binding.type === 'button-value') && binding.mode === 'toggle');
         return [id, (toggle ? mode.toggleButtonLight : undefined) ?? mode.buttonLight ?? { off: 'off', on: 'normal' }];
       }));
-    return encodeLights({ pads: mode.pads.map(pad => ({ ...pad, brightness: mode.padOffBrightness ?? pad.brightness })), pressedPads: state.activePads,
+    return encodeLights({
+      pads: mode.pads.map(pad => ({ ...pad, brightness: mode.padOffBrightness ?? pad.brightness })), pressedPads: state.activePads,
       padOnBrightness: mode.padOnBrightness, buttons, pressedButtons: state.litButtons ?? state.pressedButtons,
-      strip: { raw: state.stripRaw, mode: mode.stripLight?.mode ?? 'dot',
-        brightness: mode.stripLight?.brightness ?? 'normal', color: mode.stripLight?.color } });
+      strip: {
+        raw: state.stripRaw || (mode.stripLight?.hold ? state.stripLastRaw ?? 0 : 0), mode: mode.stripLight?.mode ?? 'dot',
+        brightness: mode.stripLight?.brightness ?? 'normal', color: mode.stripLight?.color
+      }
+    });
   }
   allOff(): OutputReport { return { reportId: 0x80, data: new Uint8Array(80) }; }
 }

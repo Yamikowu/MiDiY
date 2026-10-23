@@ -1,6 +1,8 @@
 import { toIssue, type Issue } from './issues';
-import { MappingEngine, BUTTON_IDS, createDefaultProfile, parseProfile, type Profile, type InputEvent,
-  type MidiMessage, type OutputReport, type PadVelocityCurve } from '@midiy/mikro-core';
+import {
+  MappingEngine, BUTTON_IDS, createDefaultProfile, parseProfile, type Profile, type InputEvent,
+  type MidiMessage, type OutputReport, type PadVelocityCurve
+} from '@midiy/mikro-core';
 import type { ControllerInput, MidiOutput, DeviceInfo, MidiStatus, RawReport } from './contracts';
 import type { MikroDriver, PerformanceState } from '../devices/mikro-mk3/driver';
 
@@ -25,7 +27,7 @@ type RuntimeListener = (event: RuntimeEvent) => void | Promise<void>;
 export class TranslatorRuntime {
   private engine: MappingEngine;
   private profile: Profile;
-  private performance: PerformanceState = { activePads: new Set(), pressedButtons: new Set(), stripRaw: 0 };
+  private performance: PerformanceState = { activePads: new Set(), pressedButtons: new Set(), stripRaw: 0, stripLastRaw: 0 };
   private listeners = new Set<RuntimeListener>();
   private ledEnabled = false;
   private shortcutButtons = new Set<string>();
@@ -58,19 +60,23 @@ export class TranslatorRuntime {
     for (const listener of this.listeners) {
       try {
         const pending = listener(structuredClone(event));
-        if (pending) void pending.catch(() => {});
+        if (pending) void pending.catch(() => { });
       } catch { /* Subscriber owns its failure. */ }
     }
   }
   get activeModeId() { return this.engine.activeModeId; }
   get snapshot(): RuntimeSnapshot {
     const mode = this.profile.modes.find(m => m.id === this.engine.activeModeId)!;
-    return structuredClone({ device: this.input.info, midi: this.output.status,
+    return structuredClone({
+      device: this.input.info, midi: this.output.status,
       activeModeId: this.engine.activeModeId, activePads: [...this.performance.activePads],
       pressedButtons: [...this.performance.pressedButtons], ledEnabled: this.ledEnabled,
-      lightReport: this.driver.lights(mode, { ...this.performance,
-        litButtons: new Set(BUTTON_IDS.filter(id => this.engine.isButtonLightOn(id))) }),
-      ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount });
+      lightReport: this.driver.lights(mode, {
+        ...this.performance,
+        litButtons: new Set(BUTTON_IDS.filter(id => this.engine.isButtonLightOn(id)))
+      }),
+      ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount
+    });
   }
   private publish() { this.emit({ type: 'state', state: this.snapshot }); }
   private dispatch(messages: MidiMessage[]) {
@@ -110,7 +116,9 @@ export class TranslatorRuntime {
         if (event.pressed) this.performance.pressedButtons.add(event.controlId);
         else this.performance.pressedButtons.delete(event.controlId);
       } else if (event.kind === 'strip') {
-        this.performance.stripRaw = Math.max(0, Math.min(200, event.raw)); lightsChanged = true;
+        this.performance.stripRaw = Math.max(0, Math.min(200, event.raw));
+        if (this.performance.stripRaw > 0) this.performance.stripLastRaw = this.performance.stripRaw;
+        lightsChanged = true;
       }
       let handled = false;
       if (event.kind === 'button') {
@@ -126,7 +134,7 @@ export class TranslatorRuntime {
         continue;
       }
       const result = this.engine.process(event); this.dispatch(result.messages);
-      if (result.modeChanged) { lightsChanged = true; this.performance.activePads.clear(); this.emit({ type: 'mode' }); }
+      if (result.modeChanged) { this.performance.stripLastRaw = 0; lightsChanged = true; this.performance.activePads.clear(); this.emit({ type: 'mode' }); }
       this.emit({ type: 'decoded', event });
     }
     if (lightsChanged) this.refreshLights();
@@ -139,6 +147,7 @@ export class TranslatorRuntime {
     if (restart) {
       this.resetPerformance(); this.engine = new MappingEngine(next);
     } else { this.dispatch(this.engine.reconfigure(next)); this.performance.activePads.clear(); }
+    this.performance.stripLastRaw = this.performance.stripRaw;
     this.profile = next; this.refreshLights(); this.publish();
   }
   setVelocityCurve(curve: PadVelocityCurve) {
@@ -155,7 +164,7 @@ export class TranslatorRuntime {
     this.refreshLights(); this.publish();
   }
   switchMode(id: string) {
-    this.dispatch(this.engine.switchMode(id).messages); this.performance.activePads.clear();
+    this.dispatch(this.engine.switchMode(id).messages); this.performance.activePads.clear(); this.performance.stripLastRaw = 0;
     this.refreshLights(); this.publish();
   }
   enableMidi() { return this.output.enable(); }
@@ -174,6 +183,7 @@ export class TranslatorRuntime {
     return this.connecting;
   }
   private stopLights() {
+    this.performance.stripLastRaw = 0;
     this.ledEnabled = false; this.ledGeneration++; this.pendingLed = null; this.input.cancelPending();
   }
   setLedEnabled(enabled: boolean) {
@@ -215,7 +225,7 @@ export class TranslatorRuntime {
   }
   private resetPerformance() {
     this.dispatch(this.engine.reset()); this.driver.reset(); this.shortcutButtons.clear();
-    this.performance.activePads.clear(); this.performance.pressedButtons.clear(); this.performance.stripRaw = 0;
+    this.performance.activePads.clear(); this.performance.pressedButtons.clear(); this.performance.stripRaw = 0; this.performance.stripLastRaw = 0;
   }
   panic() { this.resetPerformance(); this.refreshLights(); this.publish(); }
   disconnect(): Promise<void> {

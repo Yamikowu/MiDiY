@@ -20,7 +20,8 @@
 
 .device-face {
   --face-height: calc(100cqw / 1.82);
-  --zone-inset: 7px; /* 6px padding + 1px border */
+  --zone-inset: 7px;
+  /* 6px padding + 1px border */
   --upper-inset: calc(var(--face-height) * .025);
   --left-key-gap: 1.2cqw;
   --left-key-width: calc((100cqw * .4 - 2 * var(--zone-inset) - 3 * var(--left-key-gap)) / 4);
@@ -167,7 +168,7 @@
 }
 
 .quick-edit .hw-button,
-.edit-tools > .hw-button {
+.edit-tools>.hw-button {
   flex: 0 0 var(--short-key-height);
 }
 
@@ -238,9 +239,19 @@
   background: #666660;
   box-shadow: 0 0 2px #a9a99b33;
 }
-.strip-light.is-lit { background: var(--strip-led-color, #dce6b7); box-shadow: 0 0 5px var(--strip-led-color, #dce6b7); }
-.strip-light.is-lit[data-brightness=dim] { opacity: .55; }
-.strip-light.is-lit[data-brightness=bright] { box-shadow: 0 0 8px var(--strip-led-color, #e9f5bc); }
+
+.strip-light.is-lit {
+  background: var(--strip-led-color, #dce6b7);
+  box-shadow: 0 0 5px var(--strip-led-color, #dce6b7);
+}
+
+.strip-light.is-lit[data-brightness=dim] {
+  opacity: .55;
+}
+
+.strip-light.is-lit[data-brightness=bright] {
+  box-shadow: 0 0 8px var(--strip-led-color, #e9f5bc);
+}
 
 .performance-zone .strip {
   display: block;
@@ -364,8 +375,13 @@
 }
 
 @media (max-width: 720px) {
-  .hardware-scroll { margin-right: -15px; }
-  .hardware { margin: 0; }
+  .hardware-scroll {
+    margin-right: -15px;
+  }
+
+  .hardware {
+    margin: 0;
+  }
 }
 
 /* Rubber keys, restrained contrast and light cues reflect the hardware surface. */
@@ -380,18 +396,99 @@
   font-family: var(--mono);
   transition: background .15s, border-color .15s;
 }
-.hw-button.selected { border-color: #edede6; outline: 1px solid #edede6; outline-offset: 2px; color: #fff; }
-.hw-button.captured { border-color: #8e9c76; }
-.hw-button.is-mapped:not(.pad)::after { content: ''; position: absolute; width: 3px; height: 3px; border-radius: 50%; right: 3px; bottom: 3px; background: #c3d4a6; }
-.hardware .pad { display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; padding: 9px; background: linear-gradient(145deg, #d5d4c9e8, #b9b8afe0); border: 1px solid #a4a49c; border-bottom: 3px solid #74746e; border-radius: 4px; }
-.pad-label { font: 500 14px var(--mono); color: #44443f; }
-.pad-assignment { font: 7px var(--mono); color: #4c4c46; letter-spacing: -.04em; min-height: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hardware .pad.has-light { border-top: 3px solid var(--pad-color); background: color-mix(in srgb, var(--pad-color) 82%, #c9c8be); }
-.hardware .pad.has-light[data-brightness=dim] { background: color-mix(in srgb, var(--pad-color) 60%, #c9c8be); }
-.hardware .pad.has-light[data-brightness=bright] { background: var(--pad-color); }
-.hardware .pad.selected { border-color: #f3f1e8; }
-.hardware .pad.selected:not(.has-light), .hardware .pad:not(.has-light):hover { background: #deddd2; }
-.hardware .pad.has-light:hover { filter: brightness(1.08); }
-.hardware .hw-button:focus-visible { outline: 2px solid #d9e6b1; outline-offset: 2px; z-index: 2; }
-#hardware .pad-label { font-size: 12px; }
-#hardware .pad-assignment { display: none; }
+
+.hw-button.selected {
+  border-color: #edede6;
+  outline: 1px solid #edede6;
+  outline-offset: 2px;
+  color: #fff;
+}
+
+.hw-button.captured {
+  border-color: #8e9c76;
+}
+
+.hw-button.is-mapped:not(.pad)::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  right: 3px;
+  bottom: 3px;
+  background: #c3d4a6;
+}
+
+.hardware .pad {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: 9px;
+  background: linear-gradient(145deg, #d5d4c9e8, #b9b8afe0);
+  border: 1px solid #a4a49c;
+  border-bottom: 3px solid #74746e;
+  border-radius: 4px;
+}
+
+.pad-label {
+  font: 500 14px var(--mono);
+  color: #44443f;
+}
+
+.pad-assignment {
+  font: 7px var(--mono);
+  color: #4c4c46;
+  letter-spacing: -.04em;
+  min-height: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hardware .pad.has-light {
+  border-top: 3px solid var(--pad-color);
+  background: color-mix(in srgb, var(--pad-color) 82%, #c9c8be);
+}
+
+.hardware .pad.has-light[data-brightness=dim] {
+  background: color-mix(in srgb, var(--pad-color) 60%, #c9c8be);
+}
+
+.hardware .pad.has-light[data-brightness=bright] {
+  background: var(--pad-color);
+}
+
+.hardware .pad.selected {
+  border-color: #f3f1e8;
+}
+
+.hardware .pad.selected:not(.has-light),
+.hardware .pad:not(.has-light):hover {
+  background: #deddd2;
+}
+
+.hardware .pad.has-light:hover {
+  filter: brightness(1.08);
+}
+
+.hardware .hw-button:focus-visible {
+  outline: 2px solid #d9e6b1;
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+#hardware .pad-label {
+  font-size: 12px;
+}
+
+#hardware .pad-assignment {
+  display: none;
+}
+
+/* Keep both note identity and channel visible within the existing Pad geometry. */
+.pad-assignment {
+  white-space: pre-line;
+  line-height: 1.3;
+  min-height: 18px;
+}

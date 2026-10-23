@@ -1,8 +1,10 @@
+import { NotePreferences, noteSummary, type MiddleC, type NoteInputMode } from './note-format';
+import { NoteInputs, noteFieldMarkup } from './note-input';
 import { mappingShortcut, EditHistory, selectControls, controlsInRect, commonActions, commonFields, patchControls, copyControls, pasteControls, isPadControl, type ControlCopy } from './editor-model';
 import { t, l, attribute, labelMarkup, labelAttributes, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import {
   PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
-  type Binding, type Brightness, type ControlId, type Profile, type InputEvent, 
+  type Binding, type Brightness, type ControlId, type Profile, type InputEvent,
   type PadLight, type OutputReport, type PressureBinding, type StripLightMode
 } from '@midiy/mikro-core';
 import { TranslatorRuntime } from '../runtime/translator-runtime';
@@ -36,8 +38,10 @@ const ccFields = (prefix: string, binding?: Binding, max = 127, includeActionOn 
     + (includeActionOn ? `<label data-cc-fields="toggle trigger inc">Action on<select id="bind-${prefix}action-on"><option value="down" data-i18n="press">${t('press')}</option><option value="up" data-i18n="release">${t('release')}</option></select></label>` : '')
     + `<input type="hidden" id="bind-${prefix}initial-style" value="${style}">`;
 };
-export interface TranslatorOptions { toast: (message: string) => void }
+export interface TranslatorOptions { toast: (message: string) => void; notePreferences?: NotePreferences }
 export class TranslatorUI {
+  private readonly notePreferences: NotePreferences;
+  private noteInputs?: NoteInputs;
   private profile: Profile;
   private profileDirty = false;
   private bindingDirty = false;
@@ -54,8 +58,10 @@ export class TranslatorUI {
   private get activeModeId() { return this.runtime.activeModeId; }
   constructor(private readonly runtime: TranslatorRuntime, private readonly library: ProfileLibrary,
     private readonly options: TranslatorOptions) {
+    this.notePreferences = options.notePreferences ?? new NotePreferences();
     this.profile = library.current; this.history = new EditHistory(this.profile);
     this.mount();
+    this.notePreferences.subscribe(() => this.refreshNoteDisplay());
     let midiStatus = '', deviceStatus = '';
     runtime.subscribe(event => {
       if (event.type === 'state') {
@@ -69,15 +75,27 @@ export class TranslatorUI {
     });
     onLocaleChange(() => {
       // Translate labels in place: never re-render forms or reset their dirty state.
-      this.el('selected').textContent = this.selection.size === 1 ? controlName(this.selected) : t('selected_control_count', {p0: this.selection.size});
+      this.el('selected').textContent = this.selection.size === 1 ? controlName(this.selected) : t('selected_control_count', { p0: this.selection.size });
       this.el('draft-state').textContent = this.bindingDirty ? t('not_applied') : t('applied');
       this.el('hit-heading').textContent = isPad(this.selected) ? t('pad_hit_strike') : this.selected === 'SMART_STRIP' ? t('strip_position_position') : 'MIDI OUTPUT';
       this.el('binding-summary').textContent = this.controlSummary(this.selected);
+      this.noteInputs?.refresh();
       this.renderHelp(); this.renderSaveState(); this.renderPorts(); this.renderDevice();
       this.renderMap(); this.renderPressed();
       if (this.bindingDirty) this.previewPadLight();
     });
     if (library.warning) options.toast(translateLabel(library.warning));
+  }
+  private noteField(id: string, label: string, value: number): string {
+    return noteFieldMarkup(`bind-${id}`, label, value, this.notePreferences.current);
+  }
+  private noteLabel(note: number): string { return noteSummary(note, this.notePreferences.current.middleC); }
+  private refreshNoteDisplay(): void {
+    // Never renderBinding/applyProfile: canonical values, partial fields and all other drafts stay intact.
+    this.noteInputs?.refresh();
+    this.el('binding-summary').textContent = this.selection.size === 1 ? this.controlSummary(this.selected) : [...this.selection].map(controlName).join(' · ');
+    this.renderMap(); this.renderPressed(); this.previewBatch();
+    if (this.bindingDirty && this.selection.size === 1) this.previewPadLight();
   }
   private el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(`midi-${id}`) as T; }
   private mount(): void {
@@ -140,6 +158,10 @@ export class TranslatorUI {
         <aside class="panel mapping-editor" ${attribute('aria-label', 'control_editor', {})}>
           <div class="editor-heading"><p class="eyebrow">CONTROL INSPECTOR</p><span id="midi-draft-state" class="draft-state" role="status">${l('applied', {})}</span></div>
           <h2 id="midi-selected">Pad 1</h2><p id="midi-binding-summary" class="binding-summary"></p>
+          <div class="note-preferences">
+            <label>${l('note_octave_reference')}<select id="midi-note-octave">${[3, 4, 5].map(o => `<option value="${o}">Note 60 = C${o}</option>`).join('')}</select></label>
+            <label>${l('note_input_method')}<select id="midi-note-input-mode"><option value="number" data-i18n="note_number_mode">${t('note_number_mode')}</option><option value="name" data-i18n="note_name_mode">${t('note_name_mode')}</option></select></label>
+          </div>
           <form id="midi-binding-form">
             <div id="midi-hit-heading" class="editor-section-label">MIDI OUTPUT</div><label>${l('output_action', {})}<select id="midi-action"></select></label>
             <div id="midi-fields" class="binding-fields"></div><div id="midi-strip-touch" class="binding-fields"></div><div id="midi-pad-press" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
@@ -150,6 +172,11 @@ export class TranslatorUI {
       </div>
       <div class="mapping-status"><span id="midi-status" role="status">${l('no_midi_output_selected', {})}</span><span>${l('profiles_are_saved_in_this_browser_export_as_json', {})}</span></div>`;
     renderHardware(this.el('hardware'), (id: string, event: MouseEvent) => this.selectControl(id as ControlId, event.shiftKey), { includeEncoderTouch: true });
+    this.noteInputs = new NoteInputs(this.el('binding-form'), this.notePreferences, () => this.markBindingDirty());
+    this.el<HTMLSelectElement>('note-octave').value = String(this.notePreferences.current.middleC);
+    this.el<HTMLSelectElement>('note-input-mode').value = this.notePreferences.current.inputMode;
+    this.el('note-octave').addEventListener('change', () => this.notePreferences.update({ middleC: Number(this.el<HTMLSelectElement>('note-octave').value) as MiddleC }));
+    this.el('note-input-mode').addEventListener('change', () => this.notePreferences.update({ inputMode: this.el<HTMLSelectElement>('note-input-mode').value as NoteInputMode }));
     this.mountSelection();
     this.el<HTMLInputElement>('follow-hardware-selection').addEventListener('change', () => {
       this.followHardwareSelection = this.el<HTMLInputElement>('follow-hardware-selection').checked;
@@ -190,7 +217,7 @@ export class TranslatorUI {
     }));
     this.el('profile-delete').addEventListener('click', () => this.guard(async () => {
       if (this.library.entries.length <= 1) return this.options.toast(t('keep_at_least_one_profile'));
-      if (!await confirmAction(t('delete_profile_and_all_its_modes', {p0: this.profile.name}), t('delete_profile'))) return;
+      if (!await confirmAction(t('delete_profile_and_all_its_modes', { p0: this.profile.name }), t('delete_profile'))) return;
       this.loadProfile(this.library.deleteActive(), false);
     }));
     this.el('profile-name').addEventListener('keydown', event => {
@@ -245,7 +272,7 @@ export class TranslatorUI {
     this.el('delete-mode').addEventListener('click', async () => {
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length === 1) return this.options.toast(t('keep_at_least_one_mode'));
-      if (!await confirmAction(t('delete_mode_actions_targeting_this_mode_will_be_disabled', {p0: this.currentMode().name}), t('delete_mode'))) return;
+      if (!await confirmAction(t('delete_mode_actions_targeting_this_mode_will_be_disabled', { p0: this.currentMode().name }), t('delete_mode'))) return;
       const removed = this.activeModeId;
       this.profile.modes = this.profile.modes.filter(m => m.id !== removed);
       for (const mode of this.profile.modes) for (const [id, binding] of Object.entries(mode.bindings)) {
@@ -289,7 +316,7 @@ export class TranslatorUI {
     this.el<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     this.el<HTMLButtonElement>('copy-controls').disabled = !this.selection.size;
     this.el<HTMLButtonElement>('paste-controls').disabled = !this.selection.size || !this.copied.length;
-    this.el('selection-count').textContent = t('selected_control_count', {p0: this.selection.size});
+    this.el('selection-count').textContent = t('selected_control_count', { p0: this.selection.size });
   }
   private async selectGroup(ids: ControlId[]): Promise<void> {
     if (ids.length === this.selection.size && ids.every(id => this.selection.has(id))) return;
@@ -317,8 +344,10 @@ export class TranslatorUI {
       drag.moved = true; event.preventDefault(); hardware.setPointerCapture(event.pointerId);
       const bounds = hardware.getBoundingClientRect();
       if (!box) { box = document.createElement('div'); box.className = 'mapping-marquee'; hardware.append(box); }
-      Object.assign(box.style, { left: `${Math.min(drag.start.x, event.clientX) - bounds.left}px`, top: `${Math.min(drag.start.y, event.clientY) - bounds.top}px`,
-        width: `${Math.abs(event.clientX - drag.start.x)}px`, height: `${Math.abs(event.clientY - drag.start.y)}px` });
+      Object.assign(box.style, {
+        left: `${Math.min(drag.start.x, event.clientX) - bounds.left}px`, top: `${Math.min(drag.start.y, event.clientY) - bounds.top}px`,
+        width: `${Math.abs(event.clientX - drag.start.x)}px`, height: `${Math.abs(event.clientY - drag.start.y)}px`
+      });
     });
     hardware.addEventListener('pointerup', event => {
       if (!drag || event.pointerId !== drag.pointer) return;
@@ -372,7 +401,7 @@ export class TranslatorUI {
   private copySelection(): void {
     if (!this.selection.size) return;
     this.copied = copyControls(this.profile, this.activeModeId, [...this.selection]);
-    this.renderEditActions(); this.options.toast(t('controls_copied', {p0: this.copied.length}));
+    this.renderEditActions(); this.options.toast(t('controls_copied', { p0: this.copied.length }));
   }
   private async pasteSelection(): Promise<void> {
     if (!this.selection.size || !this.copied.length) return;
@@ -387,11 +416,15 @@ export class TranslatorUI {
     const next = this.history.peek(redo); if (!next) return;
     if (this.editingProfile || this.editingMode) return this.options.toast(t('finish_name_edit_first'));
     if (!await this.discardBindingDraft()) return;
-    try { this.library.save(next); } catch (error) { this.options.toast(t('could_not_save', {p0: formatError(error)})); return; }
+    try { this.library.save(next); } catch (error) { this.options.toast(t('could_not_save', { p0: formatError(error) })); return; }
     const previous = this.profile;
     // Feedback-only history must not flush a held note or a Toggle's ownership.
-    const structure = (profile: Profile) => JSON.stringify({ ...profile, padVelocityCurve: undefined, modes: profile.modes.map(mode => ({ ...mode,
-      buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined })) });
+    const structure = (profile: Profile) => JSON.stringify({
+      ...profile, padVelocityCurve: undefined, modes: profile.modes.map(mode => ({
+        ...mode,
+        buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined
+      }))
+    });
     this.history.move(redo); this.profile = next; this.profileDirty = false;
     if (structure(previous) === structure(next)) { this.runtime.updateFeedback(next); this.runtime.setVelocityCurve(next.padVelocityCurve ?? 'linear'); }
     else this.runtime.applyProfile(next);
@@ -399,7 +432,7 @@ export class TranslatorUI {
   }
   private renderBatch(): void {
     const ids = [...this.selection];
-    this.el('selected').textContent = t('selected_control_count', {p0: ids.length});
+    this.el('selected').textContent = t('selected_control_count', { p0: ids.length });
     this.el('binding-form').hidden = !ids.length;
     this.el('binding-summary').textContent = ids.map(controlName).join(' · ');
     this.el('draft-state').textContent = this.bindingDirty ? t('not_applied') : t('applied');
@@ -423,26 +456,30 @@ export class TranslatorUI {
     this.el('hit-heading').textContent = ids.every(isPadControl) ? t('pad_hit_strike') : 'MIDI OUTPUT';
     const fields = commonFields(view, this.activeModeId, ids);
     const fieldLabel = (label: string) => label.includes('_') ? t(label as Parameters<typeof t>[0]) : label;
-    let section = '';
-    let markup = `<p class="caption batch-hint">${l('batch_edit_hint', {})}</p>`;
+    const sections: Record<string, string> = { hit: '', press: '', pad: '' };
     if (ids.every(isPadControl)) {
       const types = ids.map(id => mode.pressureBindings?.[id as `PAD_${number}`]?.type ?? 'off');
       const same = types.every(type => type === types[0]);
-      markup += `<label>${l('pressure_action', {})}<select data-batch-key="pressAction"><option value="" disabled ${same ? '' : 'selected'}>${t('multiple_values')}</option>${['off', 'note', 'cc', 'poly-pressure', 'channel-pressure', 'pitchbend'].map(type => `<option value="${type}" ${same && types[0] === type ? 'selected' : ''}>${type === 'off' ? t('disabled') : type}</option>`).join('')}</select></label>`;
+      sections.press = `<div class="editor-section-label">${l('pad_press_continuous_pressure')}</div><label>${l('pressure_action', {})}<select data-batch-key="pressAction"><option value="" disabled ${same ? '' : 'selected'}>${t('multiple_values')}</option>${['off', 'note', 'cc', 'poly-pressure', 'channel-pressure', 'pitchbend'].map(type => `<option value="${type}" ${same && types[0] === type ? 'selected' : ''}>${type === 'off' ? t('disabled') : type}</option>`).join('')}</select></label>`;
     }
+    if (ids.every(isPadControl)) sections.pad = '<div class="editor-section-label">PAD LIGHT</div>';
     for (const field of fields) {
-      const currentSection = field.key.split('.')[0];
-      if (currentSection !== section) { section = currentSection; markup += `<p class="batch-section">${section === 'hit' ? 'MIDI / HIT' : section === 'press' ? 'PAD PRESS' : 'PAD LIGHT'}</p>`; }
+      const section = field.key.split('.')[0];
       const same = field.values.every(value => value === field.values[0]);
       const value = field.key in this.batchChanges ? this.batchChanges[field.key] : same ? field.values[0] : '';
       let options = field.options;
       if (field.key === 'pad.color' || field.key === 'pad.onColor') options = PAD_COLORS.map((label, value) => ({ label, value: String(value) }));
       if (field.key === 'pad.onColor' && ids.every(id => mode.pads[Number(id.slice(4)) - 1].onColor === undefined)) continue;
-      markup += `<label>${labelMarkup(fieldLabel(field.label))}${options
+      if (field.key.endsWith('.note')) {
+        sections[section] += noteFieldMarkup(`bind-batch-${field.key.replace('.', '-')}`, fieldLabel(field.label), value === '' ? '' : Number(value), this.notePreferences.current, field.key);
+        continue;
+      }
+      sections[section] += `<label>${labelMarkup(fieldLabel(field.label))}${options
         ? `<select data-batch-key="${field.key}" data-batch-number="${field.key.startsWith('pad.') && field.key !== 'pad.dual' ? 'true' : 'false'}"><option value="" ${value === '' ? 'selected' : ''} disabled>${t('multiple_values')}</option>${options.map(option => `<option value="${html(option.value)}" ${String(value) === option.value ? 'selected' : ''}>${html(field.key === 'pad.dual' ? option.value === 'true' ? 'Dual' : 'Single' : option.label)}</option>`).join('')}</select>`
         : `<input type="number" data-batch-key="${field.key}" min="${field.min}" max="${field.max}" step="1" value="${html(value)}" placeholder="${t('multiple_values')}">`}</label>`;
     }
-    this.el('fields').innerHTML = markup;
+    this.el('fields').innerHTML = `<p class="caption batch-hint">${l('batch_edit_hint')}</p>` + sections.hit + sections.press + sections.pad;
+    this.noteInputs?.refresh();
     this.el('binding-help').textContent = t('selection_shortcuts_hint');
     this.renderEditActions();
   }
@@ -544,7 +581,7 @@ export class TranslatorUI {
       this.renderSaveState();
     } catch (error) {
       this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
-      this.options.toast(t('could_not_save_velocity_curve', {p0: formatError(error)}));
+      this.options.toast(t('could_not_save_velocity_curve', { p0: formatError(error) }));
     }
   }
   private saveLedSettings(): void {
@@ -567,7 +604,7 @@ export class TranslatorUI {
       this.runtime.updateFeedback(next); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
     } catch (error) {
       this.renderLedSettings();
-      this.options.toast(t('could_not_save_light_settings', {p0: formatError(error)}));
+      this.options.toast(t('could_not_save_light_settings', { p0: formatError(error) }));
     }
   }
   private renderBinding(): void {
@@ -624,20 +661,21 @@ export class TranslatorUI {
       : existing?.type === 'value' ? existing.output : existing?.type === 'system' ? existing.command : existing?.type ?? 'none';
     const b = fromSelection ? undefined : existing;
     let fields = `<div class="editor-section-label">${l('strip_touch_touch_release', {})}</div>`;
-    fields += `<label>${l('touch_action', {})}<select id="bind-touch-type">${[['none',t('disabled')],['note','Note'],['cc','Control Change'],['poly-pressure','Poly Pressure'],['channel-pressure','Channel Pressure'],['program','Program Change'],['pitchbend','Pitchbend'],['start','Start'],['stop','Stop'],['continue','Continue'],['song-position','Song Position']].map(([id,label]) => `<option value="${id}" ${labelAttributes(label)}>${label}</option>`).join('')}</select></label>`;
+    fields += `<label>${l('touch_action', {})}<select id="bind-touch-type">${[['none', t('disabled')], ['note', 'Note'], ['cc', 'Control Change'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['start', 'Start'], ['stop', 'Stop'], ['continue', 'Continue'], ['song-position', 'Song Position']].map(([id, label]) => `<option value="${id}" ${labelAttributes(label)}>${label}</option>`).join('')}</select></label>`;
     if (!['none', 'start', 'stop', 'continue', 'song-position'].includes(action)) fields += field('touch-channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
-    if (action === 'note') fields += field('touch-note', 'Note Number', b?.type === 'note' ? b.note : 36) + '';
+    if (action === 'note') fields += this.noteField('touch-note', 'Note Number', b?.type === 'note' ? b.note : 36) + '';
     else if (action === 'cc') {
       fields += field('touch-controller', 'CC Number', b?.type === 'cc' ? b.controller : 1);
       fields += ccFields('touch-', b);
     } else if (action === 'poly-pressure' || action === 'channel-pressure' || action === 'pitchbend') {
       const v = b?.type === 'value' && b.output === action ? b : undefined;
       const max = action === 'pitchbend' ? 16383 : 127;
-      if (action === 'poly-pressure') fields += field('touch-note', 'Note Number', v?.note ?? 36);
+      if (action === 'poly-pressure') fields += this.noteField('touch-note', 'Note Number', v?.note ?? 36);
       fields += field('touch-on', t('touch_value'), v?.on ?? max, 0, max) + field('touch-off', t('release_value'), v?.off ?? (action === 'pitchbend' ? 8192 : 0), 0, max);
     } else if (action === 'program') fields += field('touch-program', 'Program Number', b?.type === 'program' ? b.program : 0);
     else if (action === 'song-position') fields += field('touch-position', 'Song Position', b?.type === 'system' ? b.position ?? 0 : 0, 0, 16383);
     this.el('strip-touch').innerHTML = fields;
+    this.noteInputs?.refresh();
     (document.getElementById('bind-touch-type') as HTMLSelectElement).value = action;
     if (action === 'cc') {
       (document.getElementById('bind-touch-style') as HTMLSelectElement).value = b?.type === 'cc' ? b.style : 'momentary';
@@ -648,8 +686,8 @@ export class TranslatorUI {
   private pressureLabel(binding: PressureBinding): string {
     if (binding.type === 'off') return t('disabled');
     const prefix = `CH ${binding.channel} · `;
-    if (binding.type === 'note') return `${prefix}Note ${binding.note}`;
-    if (binding.type === 'poly-pressure') return `${prefix}Poly Pressure · Note ${binding.note}`;
+    if (binding.type === 'note') return `${prefix}${this.noteLabel(binding.note!)}`;
+    if (binding.type === 'poly-pressure') return `${prefix}Poly Pressure · ${this.noteLabel(binding.note!)}`;
     if (binding.type === 'cc') return `${prefix}CC ${binding.controller}`;
     return prefix + (binding.type === 'channel-pressure' ? 'Channel Pressure' : 'Pitchbend');
   }
@@ -663,7 +701,7 @@ export class TranslatorUI {
       if (action === 'note') {
         const n = b?.type === 'note' ? b : undefined;
         const hit = this.currentMode().bindings[this.selected];
-        fields += field('press-note', t('pressure_note'), n?.note ?? (hit?.type === 'note' ? hit.note : 36));
+        fields += this.noteField('press-note', t('pressure_note'), n?.note ?? (hit?.type === 'note' ? hit.note : 36));
         fields += field('press-velocity', t('trigger_velocity'), n?.velocity ?? 100, 1, 127);
         fields += field('press-off-threshold', t('release_threshold'), n?.offThreshold ?? 10, 0, 99);
         fields += field('press-on-threshold', t('trigger_threshold'), n?.onThreshold ?? 20, 1, 100);
@@ -671,7 +709,7 @@ export class TranslatorUI {
         if (action === 'cc') fields += field('press-controller', t('pressure_cc_number'), b?.type === 'cc' ? b.controller : 1);
         if (action === 'poly-pressure') {
           const hit = this.currentMode().bindings[this.selected];
-          fields += field('press-note', t('pressure_note'), b?.type === 'poly-pressure' ? b.note : hit?.type === 'note' ? hit.note : 36);
+          fields += this.noteField('press-note', t('pressure_note'), b?.type === 'poly-pressure' ? b.note : hit?.type === 'note' ? hit.note : 36);
         }
         const bend = action === 'pitchbend';
         fields += field('press-from', bend ? t('minimum_pitch_bend') : t('output_minimum'), b && 'from' in b ? b.from : 0, bend ? -100 : 0, bend ? 100 : 127);
@@ -679,17 +717,18 @@ export class TranslatorUI {
       }
     }
     this.el('pad-press').innerHTML = fields;
+    this.noteInputs?.refresh();
     (document.getElementById('bind-press-type') as HTMLSelectElement).value = action;
   }
   private renderFields(existing?: Binding, lightDraft?: PadLight,
-    stripDraft?: { mode: StripLightMode; brightness: Brightness; color?: number }): void {
+    stripDraft?: { mode: StripLightMode; brightness: Brightness; color?: number; hold?: boolean }): void {
     const action = this.el<HTMLSelectElement>('action').value;
     const b = existing?.type === action || (existing?.type === 'strip-position' || existing?.type === 'button-value') && existing.output === action ? existing : undefined;
     let fields = '';
     if (action !== 'none' && action !== 'mode' && action !== 'fixed-velocity') fields += field('channel', 'MIDI Channel', b && 'channel' in b ? b.channel : 1, 1, 16);
     if (action === 'note') {
       const note = b?.type === 'note' ? b : undefined;
-      fields += field('note', 'Note Number', note?.note ?? 36);
+      fields += this.noteField('note', 'Note Number', note?.note ?? 36);
       const pad = isPad(this.selected);
       fields += '<label>Mode<select id="bind-note-mode"><option value="gate">Gate</option><option value="toggle">Toggle</option></select></label>';
       if (pad) {
@@ -723,12 +762,12 @@ export class TranslatorUI {
       } else if (this.selected === 'SMART_STRIP' && ['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
         const position = b?.type === 'strip-position' ? b : undefined;
         const max = action === 'pitchbend' ? 16383 : 127;
-        if (action === 'poly-pressure') fields += field('note', 'Note Number', position?.note ?? 36);
+        if (action === 'poly-pressure') fields += this.noteField('note', 'Note Number', position?.note ?? 36);
         fields += field('from', 'Range From', position?.from ?? 0, 0, max) + field('to', 'Range To', position?.to ?? max, 0, max);
       } else if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
         const button = b?.type === 'button-value' ? b : b?.type === 'program' && action === 'program'
           ? { type: 'button-value' as const, channel: b.channel, output: 'program' as const, mode: 'trigger' as const, value: b.program } : undefined;
-        if (action === 'poly-pressure') fields += field('note', 'Note Number', button?.note ?? 36);
+        if (action === 'poly-pressure') fields += this.noteField('note', 'Note Number', button?.note ?? 36);
         fields += ccFields('', button, action === 'pitchbend' ? 16383 : 127, !isPad(this.selected));
       } else if (action === 'fixed-velocity') {
         fields += field('fixed-velocity', t('fixed_velocity_value'), b?.type === 'fixed-velocity' ? b.velocity : 127, 1, 127);
@@ -758,7 +797,7 @@ export class TranslatorUI {
     this.el('pad-light').innerHTML = light
       ? `<div class="editor-section-label">PAD LIGHT</div><label>Color Mode<select id="bind-color-mode"><option value="single" data-i18n="single_one_color_two_brightness_levels">${t('single_one_color_two_brightness_levels')}</option><option value="dual" data-i18n="dual_two_colors">${t('dual_two_colors')}</option></select></label><label>${l('idle_color_color_off', {})}<select id="bind-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label><label data-pad-dual>${l('pressed_color_color_on', {})}<select id="bind-on-color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label>`
       : stripLight
-          ? `<div class="editor-section-label">STRIP LIGHT</div><label>LED Mode<select id="bind-strip-led-mode"><option value="dot" data-i18n="dot_single_point">${t('dot_single_point')}</option><option value="bar" data-i18n="bar_fill_from_left">${t('bar_fill_from_left')}</option><option value="pan" data-i18n="pan_center_outward">${t('pan_center_outward')}</option></select></label><label>Color Value<select id="bind-strip-led-color">${PAD_COLORS.slice(1).map((name, i) => `<option value="${i + 1}">${name}</option>`).join('')}</select></label><label>${l('brightness', {})}<select id="bind-strip-led-brightness">${brightnessOptions(stripLight.brightness)}</select></label>` : '';
+        ? `<div class="editor-section-label">STRIP LIGHT</div><label>LED Mode<select id="bind-strip-led-mode"><option value="dot" data-i18n="dot_single_point">${t('dot_single_point')}</option><option value="bar" data-i18n="bar_fill_from_left">${t('bar_fill_from_left')}</option><option value="pan" data-i18n="pan_center_outward">${t('pan_center_outward')}</option></select></label><label>Color Value<select id="bind-strip-led-color">${PAD_COLORS.slice(1).map((name, i) => `<option value="${i + 1}">${name}</option>`).join('')}</select></label><label>${l('brightness', {})}<select id="bind-strip-led-brightness">${brightnessOptions(stripLight.brightness)}</select></label><label class="switch strip-hold-switch"><input id="bind-strip-led-hold" type="checkbox" ${stripLight.hold ? 'checked' : ''}>${l('strip_hold_light')}</label>` : '';
     if (light) {
       (document.getElementById('bind-color-mode') as HTMLSelectElement).value = light.onColor === undefined ? 'single' : 'dual';
       (document.getElementById('bind-color') as HTMLSelectElement).value = String(light.color);
@@ -769,14 +808,15 @@ export class TranslatorUI {
       (document.getElementById('bind-strip-led-mode') as HTMLSelectElement).value = stripLight.mode;
       (document.getElementById('bind-strip-led-color') as HTMLSelectElement).value = String(stripLight.color ?? 17);
     }
+    this.noteInputs?.refresh();
     this.renderHelp();
   }
   private renderHelp(): void {
     this.el('binding-help').textContent = this.selected === 'ENCODER_ROTATE'
       ? t('input_keeps_the_raw_counter_difference_rust_defines_no_wrap_range_the_de')
       : this.selected === 'SMART_STRIP' ? t('hardware_observations_0_is_release_1_is_leftmost_and_200_is_rightmost_co')
-      : isPad(this.selected) ? t('hit_note_applies_the_velocity_curve_before_scaling_to_the_output_range_e')
-      : t('apply_updates_this_mode_s_control_and_saves_the_entire_profile_note_numb');
+        : isPad(this.selected) ? t('hit_note_applies_the_velocity_curve_before_scaling_to_the_output_range_e')
+          : t('apply_updates_this_mode_s_control_and_saves_the_entire_profile_note_numb');
   }
   private applyBinding(): void {
     if (this.pendingPaste || this.selection.size !== 1) {
@@ -802,9 +842,11 @@ export class TranslatorUI {
       const noteMode = val('note-mode') as 'gate' | 'toggle';
       const pad = isPad(this.selected);
       if (pad && num('velocity-min') > num('velocity-max')) throw new Error(t('output_minimum_cannot_exceed_output_maximum'));
-      b = { type: 'note', channel: num('channel'), note: num('note'), velocity: pad ? 'pad' : 127,
+      b = {
+        type: 'note', channel: num('channel'), note: num('note'), velocity: pad ? 'pad' : 127,
         ...(pad ? { velocityMin: num('velocity-min'), velocityMax: num('velocity-max') } : {}),
-        mode: noteMode, ...(noteMode === 'toggle' && !isPad(this.selected) ? { actionOn: val('note-action-on') as 'down' | 'up' } : {}) };
+        mode: noteMode, ...(noteMode === 'toggle' && !isPad(this.selected) ? { actionOn: val('note-action-on') as 'down' | 'up' } : {})
+      };
     }
     else if (action === 'fixed-velocity') b = { type: 'fixed-velocity', velocity: num('fixed-velocity') };
     else if (action === 'mode') b = { type: 'mode', modeId: val('mode') };
@@ -813,16 +855,22 @@ export class TranslatorUI {
       if (this.selected === 'ENCODER_ROTATE') b = { ...shared, style: 'encoder', step: num('step'), initial: num('initial'), modulus: num('modulus') };
       else if (this.selected === 'SMART_STRIP') {
         const mode = val('strip-mode') as 'absolute' | 'relative' | 'relative-offset';
-        b = { ...shared, style: 'strip', rawMin: num('raw-min'), rawMax: num('raw-max'), mode,
-          ...(mode === 'absolute' ? { from: num('strip-from'), to: num('strip-to') } : { step: num('strip-step'), resolution: num('strip-resolution') }) };
+        b = {
+          ...shared, style: 'strip', rawMin: num('raw-min'), rawMax: num('raw-max'), mode,
+          ...(mode === 'absolute' ? { from: num('strip-from'), to: num('strip-to') } : { step: num('strip-step'), resolution: num('strip-resolution') })
+        };
       }
       else b = switchCc('', shared);
     } else if (this.selected === 'SMART_STRIP' && ['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
-      b = { type: 'strip-position', channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
-        ...(action === 'poly-pressure' ? { note: num('note') } : {}), from: num('from'), to: num('to') };
+      b = {
+        type: 'strip-position', channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
+        ...(action === 'poly-pressure' ? { note: num('note') } : {}), from: num('from'), to: num('to')
+      };
     } else if (['poly-pressure', 'channel-pressure', 'program', 'pitchbend'].includes(action)) {
-      const shared = { type: 'button-value' as const, channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
-        ...(action === 'poly-pressure' ? { note: num('note') } : {}) };
+      const shared = {
+        type: 'button-value' as const, channel: num('channel'), output: action as 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend',
+        ...(action === 'poly-pressure' ? { note: num('note') } : {})
+      };
       const style = val('style');
       const actionOn = !isPad(this.selected) ? { actionOn: val('action-on') as 'down' | 'up' } : {};
       if (style === 'momentary') b = { ...shared, mode: 'gate', on: num('on'), off: num('off') };
@@ -850,8 +898,10 @@ export class TranslatorUI {
       else mode.bindings.SMART_STRIP_TOUCH = touchBinding;
     }
     if (isPad(this.selected)) {
-      mode.pads[Number(this.selected.slice(4)) - 1] = { color: num('color'), brightness: mode.pads[Number(this.selected.slice(4)) - 1].brightness,
-        ...(val('color-mode') === 'dual' ? { onColor: num('on-color') } : {}) };
+      mode.pads[Number(this.selected.slice(4)) - 1] = {
+        color: num('color'), brightness: mode.pads[Number(this.selected.slice(4)) - 1].brightness,
+        ...(val('color-mode') === 'dual' ? { onColor: num('on-color') } : {})
+      };
       const action = val('press-type');
       let press: PressureBinding = { type: 'off' };
       if (action === 'note') press = { type: 'note', channel: num('press-channel'), note: num('press-note'), velocity: num('press-velocity'), offThreshold: num('press-off-threshold'), onThreshold: num('press-on-threshold') };
@@ -866,7 +916,8 @@ export class TranslatorUI {
     }
     if (this.selected === 'SMART_STRIP') mode.stripLight = {
       mode: val('strip-led-mode') as StripLightMode, brightness: val('strip-led-brightness') as Brightness,
-      color: num('strip-led-color')
+      color: num('strip-led-color'),
+      ...((document.getElementById('bind-strip-led-hold') as HTMLInputElement).checked ? { hold: true } : {})
     };
     this.profile = parseProfile(next); this.bindingDirty = false;
     const saved = this.commit(); this.renderBinding();
@@ -891,7 +942,7 @@ export class TranslatorUI {
         || this.editingMode && this.el<HTMLInputElement>('mode-name').value.trim() !== this.currentMode().name;
     } catch (error) {
       this.profileDirty = true;
-      this.options.toast(t('could_not_save', {p0: formatError(error)}));
+      this.options.toast(t('could_not_save', { p0: formatError(error) }));
     }
     this.renderLibrary(); this.renderModes(); this.renderMap(); this.queueModeLights(); this.renderSaveState();
     return saved;
@@ -911,7 +962,7 @@ export class TranslatorUI {
       this.library.save(this.profile); this.history.record(this.profile); this.profileDirty = false; this.editingProfile = false;
       this.renderLibrary(); this.renderEditStates(); this.renderSaveState();
       this.options.toast(t('profile_saved'));
-    } catch (error) { this.options.toast(t('could_not_save', {p0: formatError(error)})); }
+    } catch (error) { this.options.toast(t('could_not_save', { p0: formatError(error) })); }
   }
   private controlSummary(id: ControlId): string {
     const mode = this.currentMode();
@@ -926,11 +977,11 @@ export class TranslatorUI {
   private bindingLabel(binding?: Binding): string {
     if (!binding || binding.type === 'none') return t('unmapped');
     if (binding.type === 'fixed-velocity') return `${t('fixed_velocity_output')} · ${binding.velocity} · Toggle`;
-    if (binding.type === 'mode') return t('mode_2', {p0: this.profile.modes.find(m => m.id === binding.modeId)?.name ?? binding.modeId});
-    if (binding.type === 'note') return `CH ${binding.channel} · Note ${binding.note} · ${binding.mode === 'toggle' ? 'Toggle' : 'Gate'}`;
+    if (binding.type === 'mode') return t('mode_2', { p0: this.profile.modes.find(m => m.id === binding.modeId)?.name ?? binding.modeId });
+    if (binding.type === 'note') return `CH ${binding.channel} · ${this.noteLabel(binding.note!)} · ${binding.mode === 'toggle' ? 'Toggle' : 'Gate'}`;
     if (binding.type === 'cc') return `CH ${binding.channel} · CC ${binding.controller}${['momentary', 'toggle', 'trigger', 'inc'].includes(binding.style) ? ` · ${{ momentary: 'Gate', toggle: 'Toggle', trigger: 'Trigger', inc: 'Inc' }[binding.style as 'momentary' | 'toggle' | 'trigger' | 'inc']}` : binding.style === 'strip' ? ` · ${{ absolute: 'Absolute', relative: 'Relative', 'relative-offset': 'Relative (Offset)' }[binding.mode ?? 'absolute']}` : ''}`;
-    if (binding.type === 'strip-position' || binding.type === 'value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · Note ${binding.note}` : ''}`;
-    if (binding.type === 'button-value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · Note ${binding.note}` : ''} · ${binding.mode === 'gate' ? 'Gate' : binding.mode === 'inc' ? 'Inc' : binding.mode === 'trigger' ? 'Trigger' : 'Toggle'}`;
+    if (binding.type === 'strip-position' || binding.type === 'value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · ${this.noteLabel(binding.note!)}` : ''}`;
+    if (binding.type === 'button-value') return `CH ${binding.channel} · ${{ 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' }[binding.output]}${binding.output === 'poly-pressure' ? ` · ${this.noteLabel(binding.note!)}` : ''} · ${binding.mode === 'gate' ? 'Gate' : binding.mode === 'inc' ? 'Inc' : binding.mode === 'trigger' ? 'Trigger' : 'Toggle'}`;
     if (binding.type === 'system') return binding.command;
     return `CH ${binding.channel} · Program ${binding.program}`;
   }
@@ -942,12 +993,12 @@ export class TranslatorUI {
       label.querySelector<HTMLSelectElement>('select')!.disabled = !dual;
     }
   }
-  private readStripLightDraft(): { mode: StripLightMode; brightness: Brightness; color?: number } | null {
+  private readStripLightDraft(): { mode: StripLightMode; brightness: Brightness; color?: number; hold?: boolean } | null {
     if (this.selected !== 'SMART_STRIP') return null;
     const mode = (document.getElementById('bind-strip-led-mode') as HTMLSelectElement | null)?.value as StripLightMode | undefined;
     const brightness = (document.getElementById('bind-strip-led-brightness') as HTMLSelectElement | null)?.value as Brightness | undefined;
     const colorValue = (document.getElementById('bind-strip-led-color') as HTMLSelectElement | null)?.value;
-    return mode && brightness ? { mode, brightness, color: colorValue === undefined ? 17 : Number(colorValue) } : null;
+    return mode && brightness ? { mode, brightness, color: colorValue === undefined ? 17 : Number(colorValue), hold: (document.getElementById('bind-strip-led-hold') as HTMLInputElement | null)?.checked ?? false } : null;
   }
   private readPadLightDraft(): PadLight | null {
     if (this.selection.size !== 1 || !isPad(this.selected)) return null;
@@ -977,7 +1028,7 @@ export class TranslatorUI {
     if (!button) return;
     this.paintPad(button, { ...draft, brightness: this.currentMode().padOffBrightness ?? draft.brightness }, preview);
     button.title = `${controlName(this.selected)} · ${this.controlSummary(this.selected)}${preview ? t('light_preview_not_applied') : ''}`;
-    button.setAttribute('aria-label', t('select', {p0: button.title}));
+    button.setAttribute('aria-label', t('select', { p0: button.title }));
     button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
   }
   private renderMap(): void {
@@ -993,15 +1044,15 @@ export class TranslatorUI {
       button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', this.selection.has(id));
       button.setAttribute('aria-pressed', String(this.selection.has(id)));
       button.title = `${controlName(id)} · ${this.controlSummary(id)}`;
-      button.setAttribute('aria-label', t('select', {p0: button.title}));
-    button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
+      button.setAttribute('aria-label', t('select', { p0: button.title }));
+      button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
       if (PAD_IDS.includes(id as `PAD_${number}`)) {
         const light = this.currentMode().pads[Number(id.slice(4)) - 1];
         this.paintPad(button, { ...light, brightness: this.currentMode().padOffBrightness ?? light.brightness });
-        button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel} / ${binding.note}` : this.bindingLabel(binding);
+        button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel}\n${this.noteLabel(binding.note)}` : this.bindingLabel(binding);
       }
     });
-    this.el('mapped-count').textContent = t('controls_mapped', {p0: count});
+    this.el('mapped-count').textContent = t('controls_mapped', { p0: count });
     this.renderEditActions();
   }
   private renderPorts(): void {
@@ -1010,7 +1061,7 @@ export class TranslatorUI {
     const midi = this.runtime.snapshot.midi;
     select.innerHTML = `<option value="" data-i18n="disable_midi_output">${t('disable_midi_output')}</option>` + midi.ports.map(p => `<option value="${html(p.id)}">${html(p.name)}</option>`).join('');
     select.disabled = !midi.enabled; select.value = midi.output?.id ?? '';
-    this.el('status').textContent = midi.output ? t('output', {p0: midi.output.name}) : t('no_midi_output_selected');
+    this.el('status').textContent = midi.output ? t('output', { p0: midi.output.name }) : t('no_midi_output_selected');
   }
   private handleEvent(event: InputEvent): void {
     if (event.kind === 'button' && event.pressed)
@@ -1062,6 +1113,6 @@ export class TranslatorUI {
     this.el('led-status').textContent = (state.ledIssue ? formatError(state.ledIssue) : state.ledStatus) || (!connected
       ? t('connecting_does_not_automatically_send_led_or_screen_reports')
       : !supported ? t('this_hid_interface_does_not_declare_output_0x80_led_takeover_is_unavaila')
-      : !state.ledEnabled ? t('device_ready_enable_takeover_to_control_pad_button_and_strip_lights') : '');
+        : !state.ledEnabled ? t('device_ready_enable_takeover_to_control_pad_button_and_strip_lights') : '');
   }
 }

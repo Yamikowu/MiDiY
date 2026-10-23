@@ -17,3 +17,5 @@ Profile 包含 name、initialModeId、modes、可選 padVelocityCurve。模式�
 FIXED VEL 可選用 `bindings.FIXED_VEL = { type: "fixed-velocity", velocity: 100 }`，力度為整數 1–127；此動作僅允許映射於 `FIXED_VEL`。它是本機 Toggle 功能，不含 MIDI Channel，初始關閉；僅數值與動作會儲存，啟用狀態不會。舊 Profile 不需遷移。
 
 可選的 `padOffBrightness` 為 16 顆 Pad 共用待機亮度（`off`／`dim`／`normal`／`bright`）。提供時優先於各 Pad 的 `brightness`；舊欄位保留以相容舊格式，缺少共用值時沿用個別值。共用設定只更新回饋，不清除 MIDI 音符。
+
+`stripLight` 可選 `hold: boolean`，缺省或 `false` 為放手熄燈，`true` 為保留最後碰觸位置的回饋。沿用 `midiy-profile-v1` 與既有儲存鍵，舊 `mpa-profile-v1` 仍可讀取；只保存開關，不保存當下位置。位置由 Runtime 維護，Driver 依目前模式編碼燈光，MIDI 原始事件不因保留燈光而改寫。

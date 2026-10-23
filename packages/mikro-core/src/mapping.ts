@@ -139,7 +139,7 @@ export class MappingEngine {
     else if (binding.type === 'value' && down) {
       const make = (value: number) => binding.output === 'poly-pressure' ? [0xa0 + ch, binding.note!, value]
         : binding.output === 'channel-pressure' ? [0xd0 + ch, value]
-        : [0xe0 + ch, value & 0x7f, value >> 7];
+          : [0xe0 + ch, value & 0x7f, value >> 7];
       result.messages.push(make(binding.on));
       this.releases.set(id, make(binding.off));
     } else if (binding.type === 'strip-position' && event.kind === 'strip' && event.raw > 0) {
@@ -147,8 +147,8 @@ export class MappingEngine {
       const value = Math.round(binding.from + amount * (binding.to - binding.from));
       const message = binding.output === 'poly-pressure' ? [0xa0 + ch, binding.note!, value]
         : binding.output === 'channel-pressure' ? [0xd0 + ch, value]
-        : binding.output === 'program' ? [0xc0 + ch, value]
-        : [0xe0 + ch, value & 0x7f, value >> 7];
+          : binding.output === 'program' ? [0xc0 + ch, value]
+            : [0xe0 + ch, value & 0x7f, value >> 7];
       const key = `${this.activeModeId}:${id}`;
       if (this.values.get(key) !== value) result.messages.push(message);
       this.values.set(key, value);

@@ -1,4 +1,15 @@
 export const zhTW = {
+  "strip_hold_light": "放開後保留燈光",
+  "note_pitch": "音名",
+  "note_octave": "八度",
+  "note_choose": "請選擇",
+  "note_complete": "請選擇完整的音名與八度。",
+  "note_invalid": "請輸入 0–127 的整數，或選擇完整音名。",
+  "note_octave_reference": "音名八度對照",
+  "note_input_method": "音符輸入方式",
+  "note_number_mode": "Note 編號",
+  "note_name_mode": "音名",
+
   "follow_hardware_selection": "跟隨實體操作選取",
   "follow_hardware_selection_help": "開啟後，操作實體按鍵或 Pad 會選取對應設定；關閉不影響 MIDI、按壓顯示與燈光回饋。重新載入預設關閉。",
   "mapping_edit_actions": "映射編輯操作",

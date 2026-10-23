@@ -9,15 +9,23 @@ export type Binding =
   | { type: 'cc'; channel: MidiChannel; controller: number; style: 'trigger'; value: number; actionOn?: 'down' | 'up' }
   | { type: 'cc'; channel: MidiChannel; controller: number; style: 'inc'; from: number; to: number; step: number; wrap: boolean; actionOn?: 'down' | 'up' }
   | { type: 'cc'; channel: MidiChannel; controller: number; style: 'encoder'; step: number; initial: number; modulus: number }
-  | { type: 'cc'; channel: MidiChannel; controller: number; style: 'strip'; rawMin: number; rawMax: number;
-      mode?: 'absolute' | 'relative' | 'relative-offset'; from?: number; to?: number; step?: number; resolution?: number }
+  | {
+    type: 'cc'; channel: MidiChannel; controller: number; style: 'strip'; rawMin: number; rawMax: number;
+    mode?: 'absolute' | 'relative' | 'relative-offset'; from?: number; to?: number; step?: number; resolution?: number
+  }
   | { type: 'strip-position'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number; from: number; to: number }
-  | { type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
-      mode: 'gate' | 'toggle'; on: number; off: number; actionOn?: 'down' | 'up' }
-  | { type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
-      mode: 'trigger'; value: number; actionOn?: 'down' | 'up' }
-  | { type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
-      mode: 'inc'; from: number; to: number; step: number; wrap: boolean; actionOn?: 'down' | 'up' }
+  | {
+    type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
+    mode: 'gate' | 'toggle'; on: number; off: number; actionOn?: 'down' | 'up'
+  }
+  | {
+    type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
+    mode: 'trigger'; value: number; actionOn?: 'down' | 'up'
+  }
+  | {
+    type: 'button-value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'program' | 'pitchbend'; note?: number;
+    mode: 'inc'; from: number; to: number; step: number; wrap: boolean; actionOn?: 'down' | 'up'
+  }
   | { type: 'value'; channel: MidiChannel; output: 'poly-pressure' | 'channel-pressure' | 'pitchbend'; note?: number; on: number; off: number }
   | { type: 'system'; command: 'start' | 'stop' | 'continue' | 'song-position'; position?: number }
   | { type: 'program'; channel: MidiChannel; program: number }
@@ -39,7 +47,7 @@ export interface Mode {
   toggleButtonLight?: { off: Brightness; on: Brightness };
   /** Retained for older profile files; the current editor uses buttonLight for all buttons. */
   buttonLights?: Partial<Record<ButtonLightId, { off: Brightness; on: Brightness }>>;
-  stripLight?: { mode: StripLightMode; brightness: Brightness; color?: number };
+  stripLight?: { mode: StripLightMode; brightness: Brightness; color?: number; hold?: boolean };
 }
 export const PAD_VELOCITY_CURVES = ['soft-3', 'soft-2', 'soft-1', 'linear', 'hard-1', 'hard-2', 'hard-3'] as const;
 export type PadVelocityCurve = typeof PAD_VELOCITY_CURVES[number];
@@ -86,6 +94,7 @@ export function parseProfile(value: unknown): Profile {
     }
     if (m.stripLight !== undefined && (!m.stripLight || !['dot', 'bar', 'pan'].includes(m.stripLight.mode) ||
       !['off', 'dim', 'normal', 'bright'].includes(m.stripLight.brightness) ||
+      m.stripLight.hold !== undefined && typeof m.stripLight.hold !== 'boolean' ||
       m.stripLight.color !== undefined && (!Number.isInteger(m.stripLight.color) || m.stripLight.color < 0 || m.stripLight.color > 17))) return fail();
     for (const [control, b] of Object.entries(m.bindings)) {
       if (!CONTROL_IDS.includes(control as ControlId) || !b || typeof b !== 'object') return fail();

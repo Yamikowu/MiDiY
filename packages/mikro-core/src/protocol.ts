@@ -68,8 +68,10 @@ export class InputDecoder {
         if (index > 15 || !(code in PAD_EVENTS)) {
           result.diagnostics.push(`Unknown pad triplet at ${offset}: ${index}/${code}/${value}`); continue;
         }
-        result.events.push({ kind: 'pad', controlId: `PAD_${padIndexToNumber(index)}`, padIndex: index,
-          event: PAD_EVENTS[code], raw: value, velocity: value === 0 ? 0 : Math.max(1, value >> 5) });
+        result.events.push({
+          kind: 'pad', controlId: `PAD_${padIndexToNumber(index)}`, padIndex: index,
+          event: PAD_EVENTS[code], raw: value, velocity: value === 0 ? 0 : Math.max(1, value >> 5)
+        });
       }
     } else result.diagnostics.push(`Unknown input report ID: ${reportId}`);
     return result;

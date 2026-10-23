@@ -72,7 +72,7 @@ export function mountTesting(runtime, toast) {
     $('capture-note').value = '';
     renderCaptureResult(finished);
     updateUI();
-    toast(finished.samples.length ? t('saved_reports', {p0: finished.samples.length}) : t('no_input_reports_received_during_capture_try_the_action_again'));
+    toast(finished.samples.length ? t('saved_reports', { p0: finished.samples.length }) : t('no_input_reports_received_during_capture_try_the_action_again'));
   }
 
   function renderCaptureResult(capture) {
@@ -81,7 +81,7 @@ export function mountTesting(runtime, toast) {
     if (!capture) { element.className = 'result empty'; element.textContent = t('connect_a_device_and_complete_a_capture_to_see_candidate_report_ids_and'); return; }
     const candidates = capture.candidates || summarizeCapture(capture);
     element.className = 'result';
-    element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${capture.note ? `<p>${l('action_notes_2', {p0: capture.note})}</p>` : ''}${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : `<p>${l('no_byte_changes_observed', {})}</p>`}`;
+    element.innerHTML = `<div class="result-title"><span>CAPTURE SUMMARY</span><strong>${capture.samples.length} reports · ${candidates.length} candidates</strong></div>${capture.note ? `<p>${l('action_notes_2', { p0: capture.note })}</p>` : ''}${candidates.length ? `<div class="candidate-list">${candidates.slice(0, 12).map(candidate => `<div><b>0x${hex(candidate.reportId)}</b><span>byte +${candidate.offset}</span><small>${candidate.count}× · ${candidate.values.slice(0, 8).map(hex).join(' / ')}${candidate.values.length > 8 ? ' …' : ''}</small></div>`).join('')}</div>` : `<p>${l('no_byte_changes_observed', {})}</p>`}`;
   }
 
   function renderCaptureList() {
@@ -103,10 +103,10 @@ export function mountTesting(runtime, toast) {
 
   function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
   function exportCsv() {
-    const rows = [['capture_id','control_id','control_label','started_at','report_count','report_id','byte_offset','change_count','values_hex','note']];
+    const rows = [['capture_id', 'control_id', 'control_label', 'started_at', 'report_count', 'report_id', 'byte_offset', 'change_count', 'values_hex', 'note']];
     for (const capture of model.session.captures) {
       const candidates = capture.candidates || summarizeCapture(capture);
-      for (const candidate of candidates) rows.push([capture.id,capture.controlId,getControl(capture.controlId)?.label || '',capture.startedAt,capture.samples.length,`0x${hex(candidate.reportId)}`,candidate.offset,candidate.count,candidate.values.map(hex).join(' '),capture.note]);
+      for (const candidate of candidates) rows.push([capture.id, capture.controlId, getControl(capture.controlId)?.label || '', capture.startedAt, capture.samples.length, `0x${hex(candidate.reportId)}`, candidate.offset, candidate.count, candidate.values.map(hex).join(' '), capture.note]);
     }
     download('midiy-candidates.csv', rows.map(row => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
   }
@@ -121,7 +121,7 @@ export function mountTesting(runtime, toast) {
       renderCaptureResult(model.session.captures.findLast(capture => capture.controlId === selected));
       updateUI();
       toast(t('session_imported'));
-    } catch (error) { toast(t('import_failed', {p0: formatError(error)})); }
+    } catch (error) { toast(t('import_failed', { p0: formatError(error) })); }
   }
 
   $('start-capture').addEventListener('click', startCapture);
@@ -141,7 +141,7 @@ export function mountTesting(runtime, toast) {
     rows.unshift(text); rows.length = Math.min(40, rows.length);
     if (!frame) frame = requestAnimationFrame(() => {
       frame = 0; $('midi-events').textContent = rows.join('\n');
-      $('midi-count').textContent = t('midi_messages', {p0: runtime.snapshot.midiCount});
+      $('midi-count').textContent = t('midi_messages', { p0: runtime.snapshot.midiCount });
     });
   }
   const unsubscribe = runtime.subscribe(event => {
@@ -152,8 +152,10 @@ export function mountTesting(runtime, toast) {
     else if (event.type === 'state') {
       const previous = device; device = event.state.device;
       if (previous && !device) { if (model.activeCapture) stopCapture(); model.lastByReport.clear(); }
-      if (!previous && device) model.session.device = { vendorId: device.vendorId, productId: device.productId,
-        productName: device.productName, connectedAt: new Date().toISOString() };
+      if (!previous && device) model.session.device = {
+        vendorId: device.vendorId, productId: device.productId,
+        productName: device.productName, connectedAt: new Date().toISOString()
+      };
       if (Boolean(previous) !== Boolean(device)) updateUI();
     }
   });
@@ -167,7 +169,7 @@ export function mountTesting(runtime, toast) {
     if (!$('pause-log').checked) renderReportRows();
     if (model.activeCapture) $('capture-result').textContent = t('recording_follow_the_control_instructions_then_select_stop_analyze');
     else renderCaptureResult(displayedCapture);
-    $('midi-count').textContent = t('midi_messages', {p0: runtime.snapshot.midiCount});
+    $('midi-count').textContent = t('midi_messages', { p0: runtime.snapshot.midiCount });
   });
   return () => { unsubscribeLocale(); unsubscribe(); if (frame) cancelAnimationFrame(frame); };
 }

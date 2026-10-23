@@ -1,5 +1,16 @@
 import type { MessageKey } from './zh-TW';
 export const en = {
+  "strip_hold_light": "Keep light on after release",
+  "note_pitch": "Pitch",
+  "note_octave": "Octave",
+  "note_choose": "Choose",
+  "note_complete": "Choose both a pitch and an octave.",
+  "note_invalid": "Enter an integer from 0–127, or choose a complete note.",
+  "note_octave_reference": "Octave convention",
+  "note_input_method": "Note input",
+  "note_number_mode": "Note number",
+  "note_name_mode": "Note name",
+
   "follow_hardware_selection": "Follow hardware selection",
   "follow_hardware_selection_help": "Select matching settings when using physical controls or Pads. Turning this off does not affect MIDI, pressed indicators or lights. Off after reload.",
   "mapping_edit_actions": "Mapping edit actions",

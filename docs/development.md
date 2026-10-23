@@ -37,3 +37,9 @@ JSON 匯出名稱維持 `midiy-session-<timestamp>.json`；候選 CSV 維持 `mi
 文字模板使用 t；需要原地更新的 HTML 文字使用 l 或 data-i18n，屬性使用 attribute／data-i18n-aria-label 等綁定。表單標籤的 labelMarkup／labelAttributes 只處理程式定義的標籤，不可用於使用者名稱或備註。翻譯參數進入 HTML 時必須跳脫。
 
 切換語言不呼叫 renderBinding、重新掛載頁面或更新 Runtime 設定；語言回呼只刷新摘要與顯示。Runtime／Adapter 透過 `src/runtime/issues.ts` 的 code、params、detail 提供結構化診斷，UI 的 formatError 決定顯示語言；既有 message／ledStatus 留作相容資訊。核心協定、識別 ID 與匯出資料不因語言切換而改寫。
+
+## Note 顯示偏好回歸
+
+`src/mapping/note-format.ts` 負責純換算與獨立偏好儲存，`note-input.ts` 負責網頁控制項；Runtime、Driver、Profile 格式不接收顯示偏好。數字欄位保留為編輯器的標準值，偏好刷新不派送表單事件。
+
+執行 `npm test` 驗證全部音符的換算、偏好儲存及已連線 Runtime 的無副作用切換。執行 `npm start` 後開啟 `/test/browser/note-preferences.html`，可用實際編輯器與 Runtime 搭配假 Adapter 做瀏覽器回歸。該頁使用記憶體儲存，不讀寫使用者 Profile；「Simulate connection + MIDI + LED」啟動模擬裝置，「Check state」顯示設定、草稿及發送／事件計數。此工具不代表實機驗證。

@@ -1,3 +1,4 @@
+import { NotePreferences } from './mapping/note-format';
 import { t, onLocaleChange, formatError, initializeLocale, mountLanguageSwitcher } from './i18n/index';
 import { TranslatorRuntime } from './runtime/translator-runtime';
 import { MikroDriver } from './devices/mikro-mk3/driver';
@@ -22,7 +23,7 @@ mountLanguageSwitcher();
 const library = new ProfileLibrary(browserStorage);
 const driver = new MikroDriver();
 const runtime = new TranslatorRuntime(new WebHidAdapter(driver.definition.input), new WebMidiAdapter(), driver, library.current);
-new TranslatorUI(runtime, library, { toast });
+new TranslatorUI(runtime, library, { toast, notePreferences: new NotePreferences(browserStorage) });
 mountTesting(runtime, toast);
 mountPages();
 runtime.subscribe(event => {
