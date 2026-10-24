@@ -22,7 +22,7 @@
 
 本節描述目前網頁的 HID Input Report 擷取，不是所有未來輸入方式的通用格式；不同裝置的 HID 資料仍需各自 Driver 解碼。
 
-目前匯出格式為 `midiy-session-v1`；`mpa-session-v1` 仍可匯入，載入後正規化，原始檔不改寫。權威匯入驗證在 `src/research/analysis.js`，狀態模型為 CaptureSession。
+目前匯出格式為 `midiy-session-v1`；只接受目前格式，不再匯入 `mpa-session-v1`。權威匯入驗證在 `src/research/analysis.js`，狀態模型為 CaptureSession。
 
 Session 保存 schema、appVersion、createdAt、device、reports、captures。每個報告保留 ISO time、相對 t（毫秒）、reportId、完整 bytes 與 changedOffsets。payload 不含 report ID，offset 從 0 開始。擷取保存控制項 ID、起訖時間、備註、按 Report ID 分開的 baseline、samples 與分析候選。
 

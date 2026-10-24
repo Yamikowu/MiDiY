@@ -1,7 +1,7 @@
 import type { ControlId, InputEvent } from './protocol.js';
 import { parseProfile, type Profile, type Mode, type Binding, type PadVelocityCurve } from './profile.js';
 export type MidiMessage = number[];
-export interface MappingResult { messages: MidiMessage[]; modeChanged: boolean }
+export interface MappingResult { messages: MidiMessage[]; modeChanged: boolean; handled?: boolean }
 const clamp = (n: number) => Math.max(0, Math.min(127, Math.round(n)));
 // Software response curves; these are not calibrated NI factory curves.
 const VELOCITY_EXPONENT: Record<PadVelocityCurve, number> = {
@@ -16,6 +16,9 @@ export function applyPadVelocityCurve(velocity: number, curve: PadVelocityCurve 
 export class MappingEngine {
   profile: Profile;
   activeModeId: string;
+  private selectorPads = new Set<ControlId>();
+  private selectorButtons = new Set<ControlId>();
+  get selectingMode() { return this.held.has(this.profile.modeSelector); }
   private fixedVelocityEnabled = false;
   private held = new Set<ControlId>();
   private notes = new Map<string, { channel: number; note: number }>();
@@ -29,6 +32,7 @@ export class MappingEngine {
   get mode(): Mode { return this.profile.modes.find(m => m.id === this.activeModeId)!; }
   /** Local mapping state, independent of physical hold and external MIDI feedback. */
   isButtonLightOn(id: ControlId): boolean {
+    if (id === this.profile.modeSelector) return this.selectingMode;
     const binding = this.mode.bindings[id];
     if (binding?.type === 'fixed-velocity') return this.fixedVelocityEnabled;
     if (binding?.type === 'note' && binding.mode === 'toggle') return this.notes.has(id);
@@ -61,7 +65,7 @@ export class MappingEngine {
     for (const id of this.held) if (id.startsWith('PAD_')) this.pressureSuppressed.add(id);
     return result;
   }
-  reset(): MidiMessage[] { const messages = this.flush(); this.held.clear(); this.pressureSuppressed.clear(); return messages; }
+  reset(): MidiMessage[] { const messages = this.flush(); this.held.clear(); this.pressureSuppressed.clear(); this.selectorPads.clear(); this.selectorButtons.clear(); return messages; }
   switchMode(id: string): MappingResult {
     if (!this.profile.modes.some(m => m.id === id)) throw new Error('Unknown mode');
     if (id === this.activeModeId) return { messages: [], modeChanged: false };
@@ -72,6 +76,27 @@ export class MappingEngine {
   process(event: InputEvent): MappingResult {
     const result: MappingResult = { messages: [], modeChanged: false };
     const id = event.controlId;
+    if (event.kind === 'button' && (id === this.profile.modeSelector || this.selectorButtons.has(id))) {
+      if (event.pressed) { this.held.add(id); this.selectorButtons.add(id); }
+      else { this.held.delete(id); this.selectorButtons.delete(id); }
+      return { ...result, handled: true };
+    }
+    if (event.kind === 'pad' && (this.selectingMode || this.selectorPads.has(id))) {
+      const down = (event.event === 'press-on' || event.event === 'note-on') && event.raw > 0;
+      if (down && !this.held.has(id)) {
+        this.held.add(id); this.selectorPads.add(id);
+        const target = this.profile.modes.find(mode => mode.selectorPad === id);
+        return { ...(target ? this.switchMode(target.id) : result), handled: true };
+      }
+      if (this.selectorPads.has(id)) {
+        if (event.event === 'press-off' || event.event === 'note-off') {
+          this.held.delete(id); this.selectorPads.delete(id); this.pressureSuppressed.delete(id);
+        }
+        return { ...result, handled: true };
+      }
+      if (event.event === 'aftertouch' || down) return { ...result, handled: true };
+      // A Pad held before GROUP still needs its original Note Off / pressure reset.
+    }
     let down: boolean | undefined;
     if (event.kind === 'button') down = event.pressed;
     if (event.kind === 'pad') {
@@ -211,7 +236,7 @@ export class MappingEngine {
   }
   private noteVelocity(binding: Extract<Binding, { type: 'note' }>, event: InputEvent): number {
     if (event.kind !== 'pad') return 127;
-    const fixed = this.mode.bindings.FIXED_VEL;
+    const fixed = Object.values(this.mode.bindings).find(binding => binding?.type === 'fixed-velocity');
     if (this.fixedVelocityEnabled && fixed?.type === 'fixed-velocity') return fixed.velocity;
     if (binding.velocity !== 'pad') return binding.velocity;
     const curved = applyPadVelocityCurve(event.velocity, this.profile.padVelocityCurve);

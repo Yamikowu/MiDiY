@@ -1,6 +1,6 @@
 .config-panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(320px, 1.1fr) minmax(640px, 2.1fr);
   gap: 20px;
   margin-bottom: 20px;
   background: #202020;
@@ -191,97 +191,84 @@
 }
 
 .device-settings {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
   gap: 0 24px;
 }
 
-.device-settings>.device-options {
-  flex: 2 1 430px;
-  min-width: 0;
-}
+.device-settings>.device-options { min-width: 0; }
 
-.device-settings>.velocity-options {
-  flex: 1 1 210px;
-}
-
-.velocity-options .led-settings {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.device-options {
-  border-top: 1px solid var(--line);
-}
+.device-options { border-top: 1px solid var(--line); }
 
 .device-options summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   padding: 18px 0;
   color: #c6c6c1;
   font-size: 11px;
   list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 9px;
 }
-
 .device-options summary::before {
   content: '+';
+  flex: 0 0 10px;
   font: 13px var(--mono);
   color: var(--quiet);
-  width: 10px;
 }
-
-.device-options[open] summary::before {
-  content: '−';
-}
-
-.device-options summary::-webkit-details-marker {
-  display: none;
-}
-
-.device-options summary>span {
+.device-options[open] summary::before { content: '−'; }
+.device-options summary::-webkit-details-marker { display: none; }
+.device-options summary>span { margin: 0; }
+.device-options summary>#midi-led-summary {
   margin-left: auto;
   font-size: 9px;
   color: var(--quiet);
 }
+.device-options .caption { margin: 0 0 16px; }
+.settings-scope { margin: 0 0 14px; }
 
-.device-options .caption {
-  max-width: 600px;
+.led-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   margin-bottom: 16px;
 }
 
-.led-takeover-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-}
-
-.led-takeover-row .caption {
-  flex: 1 1 280px;
-  max-width: none;
-  margin: 0;
-}
-
-.led-settings {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px 16px;
-  margin-top: 16px;
-}
-
-.led-settings .editor-section-label {
-  flex-basis: 100%;
-  margin: 0;
-}
-
-.led-settings label {
+.brightness-pair {
   display: grid;
-  gap: 7px;
-  min-width: 150px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.brightness-pair legend {
+  padding: 0 0 10px;
+  line-height: 14px;
+  color: var(--text);
   font-size: 10px;
-  color: var(--quiet);
+}
+
+.brightness-pair label { min-width: 0; }
+
+.velocity-setting { max-width: 240px; padding-top: 24px; margin-bottom: 16px; }
+
+.device-shortcuts {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 0 16px;
+}
+
+@media (max-width: 760px) {
+  .device-settings { grid-template-columns: minmax(0, 1fr); }
+  .velocity-setting { padding-top: 0; }
+}
+
+@media (max-width: 540px) {
+  .led-settings { grid-template-columns: minmax(0, 1fr); }
+  .brightness-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .mapping-status {
@@ -439,7 +426,7 @@
     margin-top: 22px;
   }
 
-  .device-options summary>span {
+  .device-options summary>#midi-led-summary {
     font-size: 8px;
   }
 
@@ -625,4 +612,34 @@
   grid-column: 1 / -1;
   align-self: end;
   min-height: 38px;
+}
+.mode-config-row {
+  grid-template-columns: minmax(140px, 1fr) 84px 96px 100px auto auto;
+  justify-content: start;
+}
+.mode-config-row > label { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.mode-config-row select { min-width: 0; padding-inline: 8px; }
+.mode-selector-setting { min-width: 0; }
+.mode-selector-setting .config-picker-heading { width: max-content; }
+.profile-config-row { grid-template-columns: minmax(100px, 1fr) auto auto; }
+.config-panel .config-actions { gap: 6px; }
+.config-panel .config-actions button { padding-inline: 8px; }
+.config-panel .profile-file-actions { gap: 4px; }
+.config-panel .profile-file-actions .text-button { padding-inline: 4px; }
+.mode-shortcut { color: var(--quiet); font-size: 9px; font-weight: 400; }
+@media (max-width: 1060px) {
+  .profile-config-row { grid-template-columns: minmax(140px, 220px) auto auto; justify-content: start; }
+}
+@media (max-width: 680px) {
+  .profile-config-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
+#midi-mode-color { border-left: 6px solid var(--mode-color); }
+#midi-mode-color:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 900px) {
+  .mode-config-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .mode-config-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mode-config-row .default-switch { grid-column: auto; }
+  .mode-selector-setting .config-picker-heading { width: auto; flex-wrap: wrap; gap: 4px; }
 }

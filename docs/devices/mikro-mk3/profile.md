@@ -1,21 +1,27 @@
 # Mikro MK3 Profile 與本機清單
 
-目前 `midiy-profile-v1` 仍是 Mikro MK3 專屬契約。權威型別與驗證器為 `packages/mikro-core/src/profile.ts`；本輪未變更 schema。
+目前使用 `midiy-profile-v2`，仍是 Mikro MK3 專屬契約。權威型別與驗證器為 `packages/mikro-core/src/profile.ts`。
 
-Profile 包含 name、initialModeId、modes、可選 padVelocityCurve。模式使用穩定控制項 ID，含 bindings、16 顆 Pad 燈光、可選 pressureBindings 與共用按鍵／Strip 回饋。Channel 為 1–16，數值範圍依各 binding 驗證；不含瀏覽器埠 ID 或原生裝置物件。匯入一律經 parseProfile，取得獨立副本。
+Profile 包含 name、initialModeId、modes、必填 padVelocityCurve（新建預設 linear）。模式使用穩定控制項 ID，含 bindings、16 顆 Pad 燈光、可選 pressureBindings 與 Strip 回饋。Channel 為 1–16，數值範圍依各 binding 驗證；不含瀏覽器埠 ID 或原生裝置物件。匯入一律經 parseProfile，取得獨立副本。Pad Hit 不接受 actionOn；一般按鍵 Note 輸出固定為 127。
 
-`mpa-profile-v1` 繼續可讀，載入後正規化為 MiDiY schema。缺省的壓力映射維持關閉；缺省力度曲線維持 linear。完整 API 見[套件說明](../../../packages/mikro-core/README.md)。
+本機只使用 `midiy-profile-library-v2` 保存多份設定與目前選取項目，不另寫單份設定鏡像。舊 `mpa-*` 與 v1 Profile／清單不再讀取或轉換；原有儲存資料不刪除。沒有 v2 清單時使用預設設定，清單損壞時顯示警告並使用預設設定。清單 metadata 與可攜 Profile JSON 分開，實作位於 `src/mapping/profile-library.ts`。完整 API 見[套件說明](../../../packages/mikro-core/README.md)。
 
-本機清單使用 `midiy-profile-library-v1`，目前設定使用 `midiy-profile-v1`；舊 `mpa-profile-library-v1`／`mpa-profile-v1` 仍讀取，下次儲存寫新鍵，不刪舊鍵。清單 metadata 與可攜 Profile JSON 分開，實作位於 `src/mapping/profile-library.ts`。
+草稿不寫入執行設定；套用才儲存並更新 Runtime。共用亮度與力度選單維持立即儲存。新版多裝置 Profile 與盒子路由契約屬未來規劃。
 
-草稿不寫入執行設定；套用才儲存並更新 Runtime。既有共用亮度與力度選單維持立即儲存。新版多裝置 Profile 與盒子路由契約屬未來規劃。
+本頁描述目前 Mikro 的設定與網頁儲存實作；不是其他裝置的共用 Profile 規格。共用編輯流程見[網頁操作指南](../../user-guide.md#設定檔與模式)。
 
-本頁描述目前 Mikro 的設定與網頁儲存實作；不是其他裝置的共用 Profile 規格。共用編輯流程見[網頁操作指南](../../user-guide.md#設定檔與模式)，套件型別與驗證器以現有實作為準。
+模式必填 `buttonLight: { off, on }`，作為 Gate／Trigger／Inc 的待機／按住亮度；`toggleButtonLight: { off, on }` 作為 Toggle 關閉／開啟亮度。兩組獨立，值皆為 `off`、`dim`、`normal`、`bright`，新建預設為關閉／中亮度。
 
-一般按鍵亮度保留 `buttonLight: { off, on }` 作為 Gate／Trigger／Inc 的待機／按住亮度；新增可選的 `toggleButtonLight: { off, on }` 作為 Toggle 關閉／開啟亮度。值皆為 `off`、`dim`、`normal`、`bright`。舊 Profile 缺少 `toggleButtonLight` 時沿用 `buttonLight`，兩者皆缺少時預設為關閉／中亮度。不變更 Profile 格式識別與儲存鍵。
+FIXED VEL 可選用 `bindings.FIXED_VEL = { type: "fixed-velocity", velocity: 100 }`，力度為整數 1–127；此動作可映射至一般按鍵，每個模式最多一個；新建模式預設配置在 `FIXED_VEL`，值為 127。它是本機 Toggle 功能，不含 MIDI Channel，初始關閉；僅數值與動作會儲存，啟用狀態不會。
 
-FIXED VEL 可選用 `bindings.FIXED_VEL = { type: "fixed-velocity", velocity: 100 }`，力度為整數 1–127；此動作僅允許映射於 `FIXED_VEL`。它是本機 Toggle 功能，不含 MIDI Channel，初始關閉；僅數值與動作會儲存，啟用狀態不會。舊 Profile 不需遷移。
+模式必填 `padOffBrightness` 與 `padOnBrightness`，控制 16 顆 Pad 共用待機／按下亮度，新建預設為微亮／最亮。各 Pad 保留 Single／Dual 色彩；PadLight 的 brightness 仍用於公開核心編碼介面，網頁 Driver 一律採用共用亮度。共用設定只更新回饋，不清除 MIDI 音符。
 
-可選的 `padOffBrightness` 為 16 顆 Pad 共用待機亮度（`off`／`dim`／`normal`／`bright`）。提供時優先於各 Pad 的 `brightness`；舊欄位保留以相容舊格式，缺少共用值時沿用個別值。共用設定只更新回饋，不清除 MIDI 音符。
+`stripLight` 可選 `hold: boolean`，缺省或 `false` 為放手熄燈，`true` 為保留最後碰觸位置的回饋。只保存開關，不保存當下位置。位置由 Runtime 維護，Driver 依目前模式編碼燈光，MIDI 原始事件不因保留燈光而改寫。
 
-`stripLight` 可選 `hold: boolean`，缺省或 `false` 為放手熄燈，`true` 為保留最後碰觸位置的回饋。沿用 `midiy-profile-v1` 與既有儲存鍵，舊 `mpa-profile-v1` 仍可讀取；只保存開關，不保存當下位置。位置由 Runtime 維護，Driver 依目前模式編碼燈光，MIDI 原始事件不因保留燈光而改寫。
+## 模式選擇
+
+Profile 必填 `modeSelector`，預設 GROUP。可更換為一般按鍵；SHIFT、FAVORITES、BROWSER 保留快捷鍵用途，Encoder Touch 不作選擇鍵。選擇鍵在所有模式共用且不能同時配置 MIDI 映射；UI 更換前會確認是否移除該鍵已有的映射。
+
+每個模式必填 `selectorPad: PadId | null` 與 `color: 0..17`；名稱、選擇 Pad 與 Mode Color 互相獨立，同一 Pad 最多對應一個模式。新建 Profile 包含 A–H，分別對應 Pad 13–16、9–12；Pad 1–8 留空。複製模式會清除 selectorPad，待使用者指定。
+
+MappingEngine 處理按住選擇與選擇 Pad 的事件抑制；切換模式沿用既有 flush，選擇時敲下的 Pad 放開前不產生 MIDI Hit／Press。Runtime 將 selectingMode 狀態提供給 UI 與 Driver；Driver 編碼選擇畫面，未指派 Pad 關閉，目前模式最亮，其餘已指派模式微亮。實體輸出仍須先啟用 LED 接管。

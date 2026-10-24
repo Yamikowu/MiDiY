@@ -33,7 +33,9 @@ app.js（組裝與瀏覽器生命週期）
 
 Runtime 提供 connect／disconnect、enableMidi／selectOutput、applyProfile／switchMode、setVelocityCurve／updateFeedback、setLedEnabled／panic。一般套用保留引擎的 held-control 抑制規則；載入另一份 Profile 時以 restart 重建引擎。力度與共用回饋更新不釋放正在發聲的音符。
 
-`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MIDI 寫出事件表示送出呼叫完成，不能證明 DAW 已收到。錯誤事件與 LED 狀態另外提供語言無關的 code／params／detail，由網頁翻譯；Runtime 不引用語系字典。
+`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MappingEngine 管理按住模式選擇鍵與 Pad 切換的抑制狀態；Runtime snapshot 的 selectingMode 供 UI 顯示，Driver 依 Profile 的模式 Pad／顏色產生選擇畫面。
+
+MIDI 寫出事件表示送出呼叫完成，不能證明 DAW 已收到。錯誤事件與 LED 狀態另外提供語言無關的 code／params／detail，由網頁翻譯；Runtime 不引用語系字典。
 
 關閉先停止 LED producer、取消舊佇列、清音，再依接管狀態送最後全暗報告並關閉；重疊 disconnect 共用 Promise。pagehide 只做 best effort，瀏覽器不保證等待完成。輸出埠已消失時無法保證 Note Off 到達接收端。
 

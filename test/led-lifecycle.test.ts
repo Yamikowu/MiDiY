@@ -132,7 +132,7 @@ for (const actionOn of ['down', 'up'] as const) {
   for (const type of ['note', 'cc', 'button-value'] as const) {
     test(`${type} Toggle LED follows mapping state on ${actionOn}, independently of physical press`, async () => {
       const profile = createDefaultProfile();
-      profile.modes[0].buttonLight = { off: 'dim', on: 'bright' };
+      profile.modes[0].toggleButtonLight = { off: 'dim', on: 'bright' };
       profile.modes[0].bindings.PLAY = type === 'note'
         ? { type, channel: 1, note: 60, velocity: 100, mode: 'toggle', actionOn }
         : type === 'cc' ? { type, channel: 1, controller: 20, style: 'toggle', on: 12, off: 100, actionOn }
@@ -183,7 +183,7 @@ test('Note Toggle LED clears on output switch, Panic and unplug with actual note
   toggle(); input.unplug(); assert.equal(runtime.snapshot.lightReport.data[0], 0);
 });
 
-test('Toggle brightness is independent, validates and round-trips while legacy profiles retain shared brightness', async () => {
+test('Toggle brightness is independent, validates and round-trips', async () => {
   const profile = createDefaultProfile();
   const mode = profile.modes[0];
   mode.buttonLight = { off: 'dim', on: 'normal' };
@@ -191,7 +191,7 @@ test('Toggle brightness is independent, validates and round-trips while legacy p
   mode.bindings.FAVORITES = { type: 'cc', channel: 1, controller: 2, style: 'trigger', value: 127 };
   const { parseProfile } = await import('@midiy/mikro-core');
   const { runtime, input } = fixture(profile); await runtime.connect();
-  assert.equal(runtime.snapshot.lightReport.data[0], 0x7c);
+  assert.equal(runtime.snapshot.lightReport.data[0], 0);
   mode.toggleButtonLight = { off: 'off', on: 'bright' };
   const restored = parseProfile(JSON.parse(JSON.stringify(profile)));
   assert.deepEqual(restored.modes[0].toggleButtonLight, mode.toggleButtonLight);

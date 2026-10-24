@@ -42,7 +42,7 @@ test('localization bindings escape user parameters while messages and errors rem
   assert.doesNotMatch(attribute('title', 'select', { p0: '" onmouseover="bad' }), /title="Select " onmouseover/);
   assert.equal(formatError(new AppError('hid_output_unavailable', 'legacy', { p0: '80' })), 'Device does not declare Output Report 0x80');
   assert.equal(formatError({ code: 'led_send_failed', message: 'legacy', detail: { code: 'hid_disconnected', message: 'legacy' } }), 'LED send failed: No HID device connected');
-  assert.equal(formatError(new Error('無效的 MiDiY v1 設定檔')), 'Invalid MiDiY v1 profile');
+  assert.equal(formatError(new Error('無效的 MiDiY v2 設定檔')), 'Invalid MiDiY v2 profile');
   assert.equal(formatError({ code: '__proto__', message: 'Unknown error' }), 'Unknown error');
 });
 test('blocked language storage still permits switching', () => {

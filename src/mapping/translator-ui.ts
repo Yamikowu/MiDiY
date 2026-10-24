@@ -3,7 +3,7 @@ import { NoteInputs, noteFieldMarkup } from './note-input';
 import { mappingShortcut, EditHistory, selectControls, controlsInRect, commonActions, commonFields, patchControls, copyControls, pasteControls, isPadControl, type ControlCopy } from './editor-model';
 import { t, l, attribute, labelMarkup, labelAttributes, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import {
-  PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
+  MODE_SELECTOR_BUTTONS, PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
   type Binding, type Brightness, type ControlId, type Profile, type InputEvent,
   type PadLight, type OutputReport, type PressureBinding, type StripLightMode
 } from '@midiy/mikro-core';
@@ -80,7 +80,7 @@ export class TranslatorUI {
       this.el('hit-heading').textContent = isPad(this.selected) ? t('pad_hit_strike') : this.selected === 'SMART_STRIP' ? t('strip_position_position') : 'MIDI OUTPUT';
       this.el('binding-summary').textContent = this.controlSummary(this.selected);
       this.noteInputs?.refresh();
-      this.renderHelp(); this.renderSaveState(); this.renderPorts(); this.renderDevice();
+      this.renderModeShortcut(); this.renderHelp(); this.renderSaveState(); this.renderPorts(); this.renderDevice();
       this.renderMap(); this.renderPressed();
       if (this.bindingDirty) this.previewPadLight();
     });
@@ -101,13 +101,16 @@ export class TranslatorUI {
   private mount(): void {
     this.el('panel').innerHTML = `
       <section class="config-panel" ${attribute('aria-label', 'profiles_modes', {})}>
-        <div class="config-row">
+        <div class="config-row profile-config-row">
           <label class="config-picker"><span class="config-picker-heading">${l('profile', {})}<span id="midi-save-status" class="save-status" role="status"></span></span><select id="midi-library" ${attribute('aria-label', 'select_profile', {})}></select><input id="midi-profile-name" maxlength="80" ${attribute('aria-label', 'edit_profile_name', {})} hidden></label>
           <div class="config-actions"><button id="midi-profile-edit" class="outline">${l('edit', {})}</button><button id="midi-profile-duplicate" class="outline">${l('duplicate', {})}</button><button id="midi-save" class="primary" hidden>${l('save', {})}</button><button id="midi-profile-delete" class="text-button danger" hidden>${l('delete', {})}</button></div>
           <div class="profile-file-actions"><button id="midi-export" class="text-button">${l('export', {})}</button><label class="text-button file-button" tabindex="0" role="button">${l('import', {})}<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
         </div>
-        <div class="config-row">
-          <label class="config-picker">${l('mode', {})}<select id="midi-mode" ${attribute('aria-label', 'select_mode', {})}></select><input id="midi-mode-name" maxlength="80" ${attribute('aria-label', 'edit_mode_name', {})} hidden></label>
+        <div class="config-row mode-config-row">
+          <label class="config-picker">${l('mode_name', {})}<select id="midi-mode" ${attribute('aria-label', 'select_mode', {})}></select><input id="midi-mode-name" maxlength="80" ${attribute('aria-label', 'edit_mode_name', {})} hidden></label>
+          <label>${l('mode_pad')}<select id="midi-mode-pad"></select></label>
+          <label>Mode Color<select id="midi-mode-color" aria-label="Mode Color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label>
+          <label class="mode-selector-setting"><span class="config-picker-heading">${l('mode_selector_key')}<span id="midi-mode-shortcut" class="mode-shortcut"></span></span><select id="midi-mode-selector">${MODE_SELECTOR_BUTTONS.map(id => `<option value="${id}" ${labelAttributes(controlName(id))}>${html(controlName(id))}</option>`).join('')}</select></label>
           <div class="config-actions"><button id="midi-mode-edit" class="outline">${l('edit', {})}</button><button id="midi-add-mode" class="outline">${l('duplicate', {})}</button><button id="midi-mode-save" class="primary" hidden>${l('save', {})}</button><button id="midi-delete-mode" class="text-button danger" hidden>${l('delete', {})}</button></div>
           <label class="switch default-switch"><input id="midi-initial" type="checkbox">${l('set_as_startup_mode', {})}</label>
         </div>
@@ -131,28 +134,32 @@ export class TranslatorUI {
           </div>
           <div class="device-settings">
           <details class="device-options" open><summary>${l('device_lights', {})}<span id="midi-led-summary">${l('not_controlled', {})}</span></summary>
-            <div class="led-takeover-row">
-              <label class="switch"><input id="midi-led-enable" type="checkbox" disabled>${l('take_over_led_output', {})}</label>
-              <p id="midi-led-status" class="caption" role="status"></p>
-            </div>
+            <p id="midi-led-status" class="caption" role="status"></p>
+            <p class="editor-section-label settings-scope">${l('shared_brightness_for_this_mode')}</p>
             <div class="led-settings">
-              <p class="editor-section-label">${l('shared_brightness_for_this_mode', {})}</p>
-              <label>${l('button_idle_brightness', {})}<select id="midi-button-idle-brightness"></select></label>
-              <label>${l('button_pressed_brightness', {})}<select id="midi-button-on-brightness"></select></label>
-              <label>${l('toggle_button_off_brightness', {})}<select id="midi-toggle-button-off-brightness"></select></label>
-              <label>${l('toggle_button_on_brightness', {})}<select id="midi-toggle-button-on-brightness"></select></label>
-              <label>${l('idle_brightness_for_all_16_pads', {})}<select id="midi-pad-off-brightness"></select></label>
-              <label>${l('pressed_brightness_for_all_16_pads', {})}<select id="midi-pad-on-brightness"></select></label>
+              <fieldset class="brightness-pair"><legend>Gate / Trigger / Inc</legend>
+                <label>${l('idle_brightness')}<select id="midi-button-idle-brightness" ${attribute('aria-label', 'button_idle_brightness')}></select></label>
+                <label>${l('held_brightness')}<select id="midi-button-on-brightness" ${attribute('aria-label', 'button_pressed_brightness')}></select></label>
+              </fieldset>
+              <fieldset class="brightness-pair"><legend>Toggle</legend>
+                <label>${l('off_brightness')}<select id="midi-toggle-button-off-brightness" ${attribute('aria-label', 'toggle_button_off_brightness')}></select></label>
+                <label>${l('on_brightness')}<select id="midi-toggle-button-on-brightness" ${attribute('aria-label', 'toggle_button_on_brightness')}></select></label>
+              </fieldset>
+              <fieldset class="brightness-pair"><legend>${l('all_pads')}</legend>
+                <label>${l('idle_brightness')}<select id="midi-pad-off-brightness" ${attribute('aria-label', 'idle_brightness_for_all_16_pads')}></select></label>
+                <label>${l('pressed_brightness')}<select id="midi-pad-on-brightness" ${attribute('aria-label', 'pressed_brightness_for_all_16_pads')}></select></label>
+              </fieldset>
             </div>
-            <p class="caption">${l('led_takeover_shortcut', {})}</p>
             <p class="caption">${l('changes_save_immediately_to_this_mode_button_brightness_only_affects_map', {})}</p>
           </details>
           <details class="device-options velocity-options" open><summary>${l('pad_velocity_curve', {})}</summary>
-            <div class="led-settings">
+            <p class="editor-section-label settings-scope">${l('entire_profile')}</p>
+            <div class="velocity-setting">
               <label>Pad Velocity Curve<select id="midi-pad-velocity-curve">${PAD_VELOCITY_CURVES.map(value => `<option value="${value}">${value === 'linear' ? 'Linear' : value.replace('-', ' ').replace(/^./, c => c.toUpperCase())}</option>`).join('')}</select></label>
             </div>
             <p class="caption">${l('applies_to_pad_hit_velocity_across_this_profile_and_saves_immediately_so', {})}</p>
           </details>
+          <p class="caption device-shortcuts">${l('led_takeover_shortcut')}</p>
           </div>
         </section>
         <aside class="panel mapping-editor" ${attribute('aria-label', 'control_editor', {})}>
@@ -263,7 +270,7 @@ export class TranslatorUI {
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length >= 64) return this.options.toast(t('up_to_64_modes_are_supported'));
       const copy = JSON.parse(JSON.stringify(this.currentMode()));
-      copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`;
+      copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`; copy.selectorPad = null;
       this.profile.modes.push(copy); this.commit(); this.runtime.switchMode(copy.id);
       this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
       this.editingMode = true; this.renderEditStates(); this.el<HTMLInputElement>('mode-name').focus();
@@ -281,6 +288,31 @@ export class TranslatorUI {
       if (this.profile.initialModeId === removed) this.profile.initialModeId = this.profile.modes[0].id;
       this.editingMode = false; this.commit(); this.renderBinding(); this.renderEditStates();
     });
+    this.el('mode-pad').addEventListener('change', () => this.guard(async () => {
+      if (!await this.discardBindingDraft()) return this.renderModes();
+      const next = parseProfile(this.profile);
+      next.modes.find(mode => mode.id === this.activeModeId)!.selectorPad = this.el<HTMLSelectElement>('mode-pad').value as `PAD_${number}` || null;
+      parseProfile(next); this.profile = next; this.commit();
+    }));
+    this.el('mode-color').addEventListener('change', () => this.guard(() => {
+      if (!this.currentMode().selectorPad) return this.renderModes();
+      const next = parseProfile(this.profile);
+      next.modes.find(mode => mode.id === this.activeModeId)!.color = Number(this.el<HTMLSelectElement>('mode-color').value);
+      try {
+        this.library.save(next); this.profile = next; this.history.record(next);
+        this.runtime.updateFeedback(next); this.renderSaveState();
+      } finally { this.renderModes(); }
+    }));
+    this.el('mode-selector').addEventListener('change', () => this.guard(async () => {
+      const key = this.el<HTMLSelectElement>('mode-selector').value as Profile['modeSelector'];
+      if (!await this.discardBindingDraft()) return this.renderModes();
+      const next = parseProfile(this.profile);
+      if (next.modes.some(mode => mode.bindings[key] && mode.bindings[key]?.type !== 'none')
+        && !await confirmAction(t('replace_selector_binding'), t('mode_selector_key'))) return this.renderModes();
+      next.modeSelector = key;
+      for (const mode of next.modes) delete mode.bindings[key];
+      this.profile = parseProfile(next); this.commit(); this.renderBinding();
+    }));
     this.el('initial').addEventListener('change', () => {
       if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.activeModeId; this.commit(); }
       else this.renderModes();
@@ -422,24 +454,26 @@ export class TranslatorUI {
     const structure = (profile: Profile) => JSON.stringify({
       ...profile, padVelocityCurve: undefined, modes: profile.modes.map(mode => ({
         ...mode,
-        buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined
+        color: undefined, buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined
       }))
     });
     this.history.move(redo); this.profile = next; this.profileDirty = false;
-    if (structure(previous) === structure(next)) { this.runtime.updateFeedback(next); this.runtime.setVelocityCurve(next.padVelocityCurve ?? 'linear'); }
+    if (structure(previous) === structure(next)) { this.runtime.updateFeedback(next); this.runtime.setVelocityCurve(next.padVelocityCurve); }
     else this.runtime.applyProfile(next);
     this.renderLibrary(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
   }
   private renderBatch(): void {
     const ids = [...this.selection];
     this.el('selected').textContent = t('selected_control_count', { p0: ids.length });
-    this.el('binding-form').hidden = !ids.length;
+    this.el('binding-form').hidden = !ids.length || ids.includes(this.profile.modeSelector);
+    this.el('binding-help').textContent = ids.includes(this.profile.modeSelector) ? t('mode_selector_hint') : '';
     this.el('binding-summary').textContent = ids.map(controlName).join(' · ');
     this.el('draft-state').textContent = this.bindingDirty ? t('not_applied') : t('applied');
     this.el('draft-state').classList.toggle('unsaved', this.bindingDirty);
     if (!ids.length) return;
     this.el('strip-touch').innerHTML = ''; this.el('pad-press').innerHTML = ''; this.el('pad-light').innerHTML = '';
     const actionSelect = this.el<HTMLSelectElement>('action');
+    actionSelect.disabled = ids.includes(this.profile.modeSelector);
     actionSelect.closest('label')!.hidden = Boolean(this.pendingPaste);
     if (this.pendingPaste) {
       this.el('fields').innerHTML = `<p class="caption batch-hint">${l('paste_ready_to_apply', {})}</p>`;
@@ -484,6 +518,7 @@ export class TranslatorUI {
     this.renderEditActions();
   }
   private previewBatch(): void {
+    if (this.runtime.snapshot.selectingMode) return;
     let draft = this.pendingPaste;
     if (!draft && this.selection.size > 1) {
       try { draft = patchControls(this.profile, this.activeModeId, [...this.selection], this.batchChanges); } catch { return; }
@@ -493,7 +528,7 @@ export class TranslatorUI {
     for (const id of this.selection) if (isPadControl(id)) {
       const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${id}"]`);
       const light = mode.pads[Number(id.slice(4)) - 1];
-      if (button) this.paintPad(button, { ...light, brightness: mode.padOffBrightness ?? light.brightness }, true);
+      if (button) this.paintPad(button, { ...light, brightness: mode.padOffBrightness }, true);
     }
   }
   private async guard(action: () => void | Promise<void>): Promise<void> {
@@ -550,26 +585,42 @@ export class TranslatorUI {
     this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
   }
+  private renderModeShortcut(): void {
+    const pad = this.currentMode().selectorPad;
+    this.el('mode-shortcut').textContent = pad ? `${controlName(this.profile.modeSelector)} + Pad ${pad.slice(4)}` : t('unassigned_mode_pad');
+  }
   private renderModes(): void {
+    this.renderModeShortcut();
     this.el<HTMLSelectElement>('mode').innerHTML = this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('');
     this.el<HTMLSelectElement>('mode').value = this.activeModeId;
     if (!this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     if (!this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
+    const mode = this.currentMode();
+    this.el<HTMLSelectElement>('mode-selector').value = this.profile.modeSelector;
+    this.el<HTMLSelectElement>('mode-pad').innerHTML = `<option value="" data-i18n="unassigned_mode_pad">${t('unassigned_mode_pad')}</option>` + PAD_IDS.map(id => {
+      const occupied = this.profile.modes.some(other => other.id !== mode.id && other.selectorPad === id);
+      return `<option value="${id}" ${occupied ? 'disabled' : ''}>Pad ${id.slice(4)}${occupied ? ` · ${t('assigned_mode_pad')}` : ''}</option>`;
+    }).join('');
+    this.el<HTMLSelectElement>('mode-pad').value = mode.selectorPad ?? '';
+    const colorSelect = this.el<HTMLSelectElement>('mode-color');
+    colorSelect.disabled = mode.selectorPad === null;
+    colorSelect.innerHTML = mode.selectorPad === null
+      ? `<option value="" data-i18n="mode_color_unavailable">${t('mode_color_unavailable')}</option>`
+      : PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('');
+    colorSelect.value = mode.selectorPad === null ? '' : String(mode.color);
+    colorSelect.style.setProperty('--mode-color', mode.selectorPad === null ? 'transparent' : PAD_PREVIEW[mode.color]);
     this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.activeModeId;
     this.renderLedSettings();
   }
   private renderLedSettings(): void {
-    this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
+    this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve;
     const mode = this.currentMode();
-    this.el<HTMLSelectElement>('button-idle-brightness').innerHTML = brightnessOptions(mode.buttonLight?.off ?? 'off');
-    this.el<HTMLSelectElement>('button-on-brightness').innerHTML = brightnessOptions(mode.buttonLight?.on ?? 'normal');
-    this.el<HTMLSelectElement>('toggle-button-off-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight?.off ?? mode.buttonLight?.off ?? 'off');
-    this.el<HTMLSelectElement>('toggle-button-on-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight?.on ?? mode.buttonLight?.on ?? 'normal');
-    const mixed = mode.padOffBrightness === undefined && mode.pads.some(pad => pad.brightness !== mode.pads[0].brightness);
-    this.el<HTMLSelectElement>('pad-off-brightness').innerHTML = (mixed ? `<option value="legacy" selected>${t('legacy_pad_brightness')}</option>` : '')
-      + brightnessOptions(mode.padOffBrightness ?? mode.pads[0].brightness);
-    if (mixed) this.el<HTMLSelectElement>('pad-off-brightness').value = 'legacy';
-    this.el<HTMLSelectElement>('pad-on-brightness').innerHTML = brightnessOptions(mode.padOnBrightness ?? 'bright');
+    this.el<HTMLSelectElement>('button-idle-brightness').innerHTML = brightnessOptions(mode.buttonLight.off);
+    this.el<HTMLSelectElement>('button-on-brightness').innerHTML = brightnessOptions(mode.buttonLight.on);
+    this.el<HTMLSelectElement>('toggle-button-off-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight.off);
+    this.el<HTMLSelectElement>('toggle-button-on-brightness').innerHTML = brightnessOptions(mode.toggleButtonLight.on);
+    this.el<HTMLSelectElement>('pad-off-brightness').innerHTML = brightnessOptions(mode.padOffBrightness);
+    this.el<HTMLSelectElement>('pad-on-brightness').innerHTML = brightnessOptions(mode.padOnBrightness);
   }
   private saveVelocityCurve(): void {
     const next = parseProfile({ ...this.profile, padVelocityCurve: this.el<HTMLSelectElement>('pad-velocity-curve').value as PadVelocityCurve });
@@ -577,10 +628,10 @@ export class TranslatorUI {
       this.library.save(next);
       this.history.record(next); this.profile = next;
       // Only future hits change; preserve held notes and their release targets.
-      this.runtime.setVelocityCurve(next.padVelocityCurve!);
+      this.runtime.setVelocityCurve(next.padVelocityCurve);
       this.renderSaveState();
     } catch (error) {
-      this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve ?? 'linear';
+      this.el<HTMLSelectElement>('pad-velocity-curve').value = this.profile.padVelocityCurve;
       this.options.toast(t('could_not_save_velocity_curve', { p0: formatError(error) }));
     }
   }
@@ -596,8 +647,7 @@ export class TranslatorUI {
       on: this.el<HTMLSelectElement>('toggle-button-on-brightness').value as Brightness,
     };
     mode.padOnBrightness = padOn;
-    const padOff = this.el<HTMLSelectElement>('pad-off-brightness').value;
-    if (padOff !== 'legacy') mode.padOffBrightness = padOff as Brightness;
+    mode.padOffBrightness = this.el<HTMLSelectElement>('pad-off-brightness').value as Brightness;
     try {
       this.library.save(next);
       this.history.record(next); this.profile = next;
@@ -611,7 +661,7 @@ export class TranslatorUI {
     if (this.selection.size !== 1 || this.pendingPaste) { this.renderBatch(); return; }
     this.batchChanges = {};
     this.el('action').closest('label')!.hidden = false;
-    this.el('binding-form').hidden = false;
+    this.el('binding-form').hidden = this.selected === this.profile.modeSelector;
     this.el('selected').textContent = controlName(this.selected);
     this.bindingDirty = false;
     this.el('draft-state').textContent = t('applied'); this.el('draft-state').classList.remove('unsaved');
@@ -625,11 +675,14 @@ export class TranslatorUI {
       : continuous ? [['none', t('disabled')], ['cc', 'MIDI CC']] : isPad(this.selected)
         ? [['none', t('disabled')], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', t('switch_mode')]]
         : [['none', t('disabled')], ['note', 'MIDI Note'], ['cc', 'MIDI CC'], ['poly-pressure', 'Poly Pressure'], ['channel-pressure', 'Channel Pressure'], ['program', 'Program Change'], ['pitchbend', 'Pitchbend'], ['mode', t('switch_mode')]];
-    if (this.selected === 'FIXED_VEL') actions.push(['fixed-velocity', t('fixed_velocity_output')]);
+    if (MODE_SELECTOR_BUTTONS.includes(this.selected as Profile['modeSelector']) && this.selected !== this.profile.modeSelector) actions.push(['fixed-velocity', t('fixed_velocity_output')]);
+    const selector = this.selected === this.profile.modeSelector;
+    this.el<HTMLSelectElement>('action').disabled = selector;
     this.el<HTMLSelectElement>('action').innerHTML = actions.map(([id, label]) => `<option value="${id}" ${labelAttributes(label)}>${label}</option>`).join('');
     const b = this.currentMode().bindings[this.selected];
     this.el<HTMLSelectElement>('action').value = b?.type === 'strip-position' || b?.type === 'button-value' ? b.output : b?.type ?? 'none';
     this.renderFields(b); this.renderTouchFields(touch); this.renderPressFields(press); this.renderSaveState();
+    if (selector) this.el('binding-help').textContent = t('mode_selector_hint');
   }
   private syncCcFields(container: 'fields' | 'strip-touch', prefix: string): void {
     const root = this.el(container);
@@ -812,6 +865,7 @@ export class TranslatorUI {
     this.renderHelp();
   }
   private renderHelp(): void {
+    if (this.selection.has(this.profile.modeSelector)) { this.el('binding-help').textContent = t('mode_selector_hint'); return; }
     this.el('binding-help').textContent = this.selected === 'ENCODER_ROTATE'
       ? t('input_keeps_the_raw_counter_difference_rust_defines_no_wrap_range_the_de')
       : this.selected === 'SMART_STRIP' ? t('hardware_observations_0_is_release_1_is_leftmost_and_200_is_rightmost_co')
@@ -880,6 +934,10 @@ export class TranslatorUI {
     }
     const next = JSON.parse(JSON.stringify(this.profile)) as Profile;
     const mode = next.modes.find(m => m.id === this.activeModeId)!;
+    if (this.selected === next.modeSelector) return;
+    if (b.type === 'fixed-velocity') for (const [id, binding] of Object.entries(mode.bindings)) {
+      if (binding?.type === 'fixed-velocity') delete mode.bindings[id as ControlId];
+    }
     mode.bindings[this.selected] = b;
     if (this.selected === 'SMART_STRIP') {
       const touch = val('touch-type');
@@ -966,6 +1024,7 @@ export class TranslatorUI {
   }
   private controlSummary(id: ControlId): string {
     const mode = this.currentMode();
+    if (id === this.profile.modeSelector) return t('mode_selector_key');
     const hit = this.bindingLabel(mode.bindings[id]);
     if (isPad(id)) {
       const press = mode.pressureBindings?.[id];
@@ -1020,19 +1079,21 @@ export class TranslatorUI {
     button.dataset.brightness = light.brightness;
   }
   private previewPadLight(): void {
+    if (this.runtime.snapshot.selectingMode) return;
     const draft = this.readPadLightDraft();
     if (!draft) return;
     const saved = this.currentMode().pads[Number(this.selected.slice(4)) - 1];
     const preview = draft.color !== saved.color || (draft.onColor ?? draft.color) !== (saved.onColor ?? saved.color) || draft.brightness !== saved.brightness;
     const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${this.selected}"]`);
     if (!button) return;
-    this.paintPad(button, { ...draft, brightness: this.currentMode().padOffBrightness ?? draft.brightness }, preview);
+    this.paintPad(button, { ...draft, brightness: this.currentMode().padOffBrightness }, preview);
     button.title = `${controlName(this.selected)} · ${this.controlSummary(this.selected)}${preview ? t('light_preview_not_applied') : ''}`;
     button.setAttribute('aria-label', t('select', { p0: button.title }));
     button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
   }
   private renderMap(): void {
     const count = new Set([
+      this.profile.modeSelector,
       ...Object.entries(this.currentMode().bindings).filter(([, b]) => b && b.type !== 'none').map(([id]) => id === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : id),
       ...Object.entries(this.currentMode().pressureBindings ?? {}).filter(([, b]) => b && b.type !== 'off').map(([id]) => id)
     ]).size;
@@ -1040,7 +1101,7 @@ export class TranslatorUI {
       const id = button.dataset.control as ControlId, binding = this.currentMode().bindings[id];
       const press = isPad(id) ? this.currentMode().pressureBindings?.[id] : undefined;
       const touch = id === 'SMART_STRIP' ? this.currentMode().bindings.SMART_STRIP_TOUCH : undefined;
-      const mapped = Boolean(binding && binding.type !== 'none' || press && press.type !== 'off' || touch && touch.type !== 'none');
+      const mapped = id === this.profile.modeSelector || Boolean(binding && binding.type !== 'none' || press && press.type !== 'off' || touch && touch.type !== 'none');
       button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', this.selection.has(id));
       button.setAttribute('aria-pressed', String(this.selection.has(id)));
       button.title = `${controlName(id)} · ${this.controlSummary(id)}`;
@@ -1048,7 +1109,7 @@ export class TranslatorUI {
       button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
       if (PAD_IDS.includes(id as `PAD_${number}`)) {
         const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-        this.paintPad(button, { ...light, brightness: this.currentMode().padOffBrightness ?? light.brightness });
+        this.paintPad(button, { ...light, brightness: this.currentMode().padOffBrightness });
         button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel}\n${this.noteLabel(binding.note)}` : this.bindingLabel(binding);
       }
     });
@@ -1082,8 +1143,16 @@ export class TranslatorUI {
       if (!PAD_IDS.includes(id)) return;
       const pressed = activePads.has(id);
       button.classList.toggle('is-pressed', pressed);
+      if (state.selectingMode) {
+        const target = this.profile.modes.find(mode => mode.selectorPad === id);
+        this.paintPad(button, { color: target?.color ?? 0, brightness: target?.id === this.activeModeId ? 'bright' : 'dim' });
+        button.querySelector('.pad-assignment')!.textContent = target?.name ?? '';
+        return;
+      }
+      const binding = this.currentMode().bindings[id];
+      button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel}\n${this.noteLabel(binding.note)}` : this.bindingLabel(binding);
       const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness ?? 'bright' } : { ...light, brightness: this.currentMode().padOffBrightness ?? light.brightness });
+      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness } : { ...light, brightness: this.currentMode().padOffBrightness });
     });
   }
   private queueModeLights(): void {
@@ -1114,5 +1183,7 @@ export class TranslatorUI {
       ? t('connecting_does_not_automatically_send_led_or_screen_reports')
       : !supported ? t('this_hid_interface_does_not_declare_output_0x80_led_takeover_is_unavaila')
         : !state.ledEnabled ? t('device_ready_enable_takeover_to_control_pad_button_and_strip_lights') : '');
+    this.el('led-status').hidden = !state.ledIssue || state.ledIssue.code === 'led_sent';
+    this.el('led-enable').closest('label')!.title = `${t('led_toggle_hint')}\n${t(state.ledEnabled ? 'controlled' : 'not_controlled')}\n${this.el('led-status').textContent}`;
   }
 }

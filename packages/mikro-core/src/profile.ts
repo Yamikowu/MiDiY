@@ -1,4 +1,4 @@
-import { BUTTON_IDS, CONTROL_IDS, PAD_IDS, type Brightness, type ButtonLightId, type ControlId, type PadLight, type StripLightMode } from './protocol.js';
+import { BUTTON_IDS, CONTROL_IDS, PAD_IDS, type Brightness, type ButtonId, type PadId, type ControlId, type PadLight, type StripLightMode } from './protocol.js';
 export type MidiChannel = number; // Human-facing 1–16 throughout profiles.
 export type Binding =
   | { type: 'none' }
@@ -39,58 +39,62 @@ export type PressureBinding =
   | { type: 'channel-pressure'; channel: MidiChannel; from: number; to: number }
   | { type: 'pitchbend'; channel: MidiChannel; from: number; to: number };
 export interface Mode {
-  id: string; name: string; bindings: Partial<Record<ControlId, Binding>>; pads: PadLight[];
+  id: string; name: string; selectorPad: PadId | null; color: number; bindings: Partial<Record<ControlId, Binding>>; pads: PadLight[];
   pressureBindings?: Partial<Record<`PAD_${number}`, PressureBinding>>;
-  padOnBrightness?: Brightness;
-  padOffBrightness?: Brightness;
-  buttonLight?: { off: Brightness; on: Brightness };
-  toggleButtonLight?: { off: Brightness; on: Brightness };
-  /** Retained for older profile files; the current editor uses buttonLight for all buttons. */
-  buttonLights?: Partial<Record<ButtonLightId, { off: Brightness; on: Brightness }>>;
+  padOnBrightness: Brightness;
+  padOffBrightness: Brightness;
+  buttonLight: { off: Brightness; on: Brightness };
+  toggleButtonLight: { off: Brightness; on: Brightness };
   stripLight?: { mode: StripLightMode; brightness: Brightness; color?: number; hold?: boolean };
 }
 export const PAD_VELOCITY_CURVES = ['soft-3', 'soft-2', 'soft-1', 'linear', 'hard-1', 'hard-2', 'hard-3'] as const;
 export type PadVelocityCurve = typeof PAD_VELOCITY_CURVES[number];
-export interface Profile { schema: 'midiy-profile-v1'; name: string; initialModeId: string; modes: Mode[]; padVelocityCurve?: PadVelocityCurve }
+export const MODE_SELECTOR_BUTTONS = BUTTON_IDS.filter(id => !['SHIFT', 'FAVORITES', 'BROWSER', 'ENCODER_TOUCH'].includes(id));
+export interface Profile { modeSelector: ButtonId; schema: 'midiy-profile-v2'; name: string; initialModeId: string; modes: Mode[]; padVelocityCurve: PadVelocityCurve }
 export function createMode(id: string, name: string): Mode {
-  return { id, name, bindings: {}, pads: PAD_IDS.map(() => ({ color: 11, brightness: 'dim' })) };
+  return { id, name, selectorPad: null, color: 11, bindings: { FIXED_VEL: { type: 'fixed-velocity', velocity: 127 } }, padOnBrightness: 'bright', padOffBrightness: 'dim',
+    buttonLight: { off: 'off', on: 'normal' }, toggleButtonLight: { off: 'off', on: 'normal' }, pads: PAD_IDS.map(() => ({ color: 11, brightness: 'dim' })) };
 }
 export function createDefaultProfile(): Profile {
-  const mode = createMode('default', 'Default');
-  PAD_IDS.forEach((id, i) => { mode.bindings[id] = { type: 'note', channel: 1, note: 36 + i, velocity: 'pad' }; });
-  return { schema: 'midiy-profile-v1', name: 'Mikro MIDI', initialModeId: mode.id, modes: [mode] };
+  const modes = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, i) => {
+    const mode = createMode(i === 0 ? 'default' : `group-${name.toLowerCase()}`, name);
+    mode.selectorPad = PAD_IDS[[13, 14, 15, 16, 9, 10, 11, 12][i] - 1];
+    mode.color = [1, 2, 5, 7, 9, 11, 13, 15][i];
+    PAD_IDS.forEach((id, pad) => { mode.bindings[id] = { type: 'note', channel: 1, note: 36 + pad, velocity: 'pad' }; });
+    return mode;
+  });
+  return { schema: 'midiy-profile-v2', modeSelector: 'GROUP', name: 'Mikro MIDI', initialModeId: modes[0].id, modes, padVelocityCurve: 'linear' };
 }
 const byte = (n: unknown): n is number => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 127;
 const channel = (n: unknown) => Number.isInteger(n) && Number(n) >= 1 && Number(n) <= 16;
 /** Validate imported data before it can generate MIDI or device output. Returns a detached copy. */
 export function parseProfile(value: unknown): Profile {
-  const fail = (): never => { throw new Error('無效的 MiDiY v1 設定檔'); };
+  const fail = (): never => { throw new Error('無效的 MiDiY v2 設定檔'); };
   if (!value || typeof value !== 'object') return fail();
   const p = value as Profile & { schema: string };
-  if (!['midiy-profile-v1', 'mpa-profile-v1'].includes(p.schema) || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.modes) || !p.modes.length || p.modes.length > 64) return fail();
-  if (p.padVelocityCurve !== undefined && !PAD_VELOCITY_CURVES.includes(p.padVelocityCurve)) return fail();
+  if (p.schema !== 'midiy-profile-v2' || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.modes) || !p.modes.length || p.modes.length > 64) return fail();
+  if (!PAD_VELOCITY_CURVES.includes(p.padVelocityCurve)) return fail();
+  if (!MODE_SELECTOR_BUTTONS.includes(p.modeSelector)) return fail();
+  const assigned = p.modes.map(m => m?.selectorPad).filter(pad => pad !== null);
+  if (new Set(assigned).size !== assigned.length) return fail();
   const ids = p.modes.map(m => m?.id);
   if (new Set(ids).size !== ids.length || !ids.includes(p.initialModeId)) return fail();
   for (const m of p.modes) {
     if (!m || typeof m.id !== 'string' || !m.id || typeof m.name !== 'string' || !m.name.trim() || !Array.isArray(m.pads) || m.pads.length !== 16 || !m.bindings || typeof m.bindings !== 'object' || Array.isArray(m.bindings)) return fail();
+    if (m.selectorPad !== null && !PAD_IDS.includes(m.selectorPad) || !Number.isInteger(m.color) || m.color < 0 || m.color > 17) return fail();
+    if (m.bindings[p.modeSelector] && m.bindings[p.modeSelector]?.type !== 'none') return fail();
+    if (Object.values(m.bindings).filter(b => b?.type === 'fixed-velocity').length > 1) return fail();
     for (const pad of m.pads) {
       if (!pad || !Number.isInteger(pad.color) || pad.color < 0 || pad.color > 17 ||
         pad.onColor !== undefined && (!Number.isInteger(pad.onColor) || pad.onColor < 0 || pad.onColor > 17) ||
         !['off', 'dim', 'normal', 'bright'].includes(pad.brightness)) return fail();
     }
-    if (m.padOffBrightness !== undefined && !['off', 'dim', 'normal', 'bright'].includes(m.padOffBrightness)) return fail();
-    if (m.padOnBrightness !== undefined && !['off', 'dim', 'normal', 'bright'].includes(m.padOnBrightness)) return fail();
+    if (!['off', 'dim', 'normal', 'bright'].includes(m.padOffBrightness)) return fail();
+    if (!['off', 'dim', 'normal', 'bright'].includes(m.padOnBrightness)) return fail();
     for (const light of [m.buttonLight, m.toggleButtonLight]) {
-      if (light !== undefined && (!light ||
+      if (!light ||
         !['off', 'dim', 'normal', 'bright'].includes(light.off) ||
-        !['off', 'dim', 'normal', 'bright'].includes(light.on))) return fail();
-    }
-    if (m.buttonLights !== undefined) {
-      if (!m.buttonLights || typeof m.buttonLights !== 'object' || Array.isArray(m.buttonLights)) return fail();
-      for (const [id, light] of Object.entries(m.buttonLights)) {
-        if (!BUTTON_IDS.slice(0, 39).includes(id as ButtonLightId) || !light ||
-          !['off', 'dim', 'normal', 'bright'].includes(light.off) || !['off', 'dim', 'normal', 'bright'].includes(light.on)) return fail();
-      }
+        !['off', 'dim', 'normal', 'bright'].includes(light.on)) return fail();
     }
     if (m.stripLight !== undefined && (!m.stripLight || !['dot', 'bar', 'pan'].includes(m.stripLight.mode) ||
       !['off', 'dim', 'normal', 'bright'].includes(m.stripLight.brightness) ||
@@ -98,10 +102,11 @@ export function parseProfile(value: unknown): Profile {
       m.stripLight.color !== undefined && (!Number.isInteger(m.stripLight.color) || m.stripLight.color < 0 || m.stripLight.color > 17))) return fail();
     for (const [control, b] of Object.entries(m.bindings)) {
       if (!CONTROL_IDS.includes(control as ControlId) || !b || typeof b !== 'object') return fail();
+      if (PAD_IDS.includes(control as `PAD_${number}`) && 'actionOn' in b) return fail();
       const continuous = control === 'SMART_STRIP' || control === 'ENCODER_ROTATE';
       if (b.type === 'none') continue;
       if (b.type === 'fixed-velocity') {
-        if (control !== 'FIXED_VEL' || !byte(b.velocity) || b.velocity < 1) return fail();
+        if (!MODE_SELECTOR_BUTTONS.includes(control as ButtonId) || !byte(b.velocity) || b.velocity < 1) return fail();
         continue;
       }
       if (b.type === 'mode') { if (continuous || !ids.includes(b.modeId)) return fail(); continue; }
@@ -168,13 +173,6 @@ export function parseProfile(value: unknown): Profile {
     }
   }
   const detached = JSON.parse(JSON.stringify(p)) as Profile;
-  detached.schema = 'midiy-profile-v1';
-  // Earlier web profiles exposed Action on for Pad Hit. Keep them importable,
-  // but Pad Hit always acts on the hit edge in the current editor.
-  for (const mode of detached.modes) for (const pad of PAD_IDS) {
-    const binding = mode.bindings[pad];
-    if (binding && 'actionOn' in binding) delete binding.actionOn;
-  }
   // Buttons have no measured strike velocity; their Note output is always 127.
   for (const mode of detached.modes) for (const [id, binding] of Object.entries(mode.bindings)) {
     if (!PAD_IDS.includes(id as `PAD_${number}`) && binding?.type === 'note') binding.velocity = 127;

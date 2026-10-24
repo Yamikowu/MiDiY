@@ -10,7 +10,7 @@ test('selection toggles with Shift; reversed marquee intersects real control bou
   assert.deepEqual(selectControls(['PAD_1'], ['PLAY'], false), ['PLAY']);
   assert.deepEqual(controlsInRect([{ id: 'PLAY', left: 10, top: 20, right: 30, bottom: 40 }, { id: 'STOP', left: 40, top: 20, right: 60, bottom: 40 }], { x: 35, y: 45 }, { x: 5, y: 15 }), ['PLAY']);
 });
-test('batch patches preserve mixed notes, unmapped controls, legacy Pad brightness and Press', () => {
+test('batch patches preserve mixed notes, unmapped controls, Pad light data and Press', () => {
   const { profile, modeId } = setup(); const mode = profile.modes[0];
   mode.pressureBindings = { PAD_1: { type: 'cc', channel: 2, controller: 7, from: 10, to: 100 } };
   mode.pads[0].brightness = 'bright';
@@ -70,8 +70,8 @@ test('incompatible, count-mismatched, Fixed Vel and missing-mode pastes leave in
   assert.throws(() => pasteControls(profile, modeId, ['PAD_3'], copyControls(profile, modeId, ['PAD_1', 'PAD_2'])), /paste_count_mismatch/);
   assert.deepEqual(profile, before);
   profile.modes[0].bindings.FIXED_VEL = { type: 'fixed-velocity', velocity: 90 };
-  assert.throws(() => pasteControls(profile, modeId, ['PLAY'], copyControls(profile, modeId, ['FIXED_VEL'])), /paste_incompatible/);
-  const other = structuredClone(profile); other.modes.push({ ...structuredClone(other.modes[0]), id: 'other' });
+  assert.throws(() => pasteControls(profile, modeId, ['PLAY'], copyControls(profile, modeId, ['FIXED_VEL'])));
+  const other = structuredClone(profile); other.modes.push({ ...structuredClone(other.modes[0]), id: 'other', selectorPad: null });
   other.modes[0].bindings.PLAY = { type: 'mode', modeId: 'other' };
   assert.throws(() => pasteControls(profile, modeId, ['PLAY'], copyControls(other, modeId, ['PLAY'])));
 });

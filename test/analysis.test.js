@@ -33,12 +33,11 @@ test('capture summary compares first sample with baseline for the same report ID
 });
 
 test('reject invalid imported report bytes', () => {
-  assert.throws(() => normalizeImport({ schema: 'mpa-session-v1', captures: [], reports: [{ reportId: 1, bytes: [300] }] }));
+  assert.throws(() => normalizeImport({ schema: 'midiy-session-v1', captures: [], reports: [{ reportId: 1, bytes: [300] }] }));
 });
 
-test('old sessions import as MiDiY sessions without mutating the source', () => {
-  const old = { schema: 'mpa-session-v1', captures: [], reports: [] };
-  assert.equal(normalizeImport(old).schema, 'midiy-session-v1');
-  assert.equal(old.schema, 'mpa-session-v1');
-  assert.equal(normalizeImport({ ...old, schema: 'midiy-session-v1' }).schema, 'midiy-session-v1');
+test('current sessions import without rewriting schema; old sessions are rejected', () => {
+  const session = { schema: 'midiy-session-v1', captures: [], reports: [] };
+  assert.deepEqual(normalizeImport(session), session);
+  assert.throws(() => normalizeImport({ ...session, schema: 'mpa-session-v1' }));
 });

@@ -8,7 +8,7 @@ import type { MikroDriver, PerformanceState } from '../devices/mikro-mk3/driver'
 
 export interface RuntimeSnapshot {
   device: DeviceInfo | null; midi: MidiStatus; activeModeId: string;
-  activePads: string[]; pressedButtons: string[]; ledEnabled: boolean;
+  selectingMode: boolean; activePads: string[]; pressedButtons: string[]; ledEnabled: boolean;
   lightReport: OutputReport; ledStatus: string; ledIssue: Issue | null; midiCount: number;
 }
 export type RuntimeEvent =
@@ -69,12 +69,12 @@ export class TranslatorRuntime {
     const mode = this.profile.modes.find(m => m.id === this.engine.activeModeId)!;
     return structuredClone({
       device: this.input.info, midi: this.output.status,
-      activeModeId: this.engine.activeModeId, activePads: [...this.performance.activePads],
+      activeModeId: this.engine.activeModeId, selectingMode: this.engine.selectingMode, activePads: [...this.performance.activePads],
       pressedButtons: [...this.performance.pressedButtons], ledEnabled: this.ledEnabled,
       lightReport: this.driver.lights(mode, {
         ...this.performance,
         litButtons: new Set(BUTTON_IDS.filter(id => this.engine.isButtonLightOn(id)))
-      }),
+      }, this.profile, this.engine.selectingMode),
       ledStatus: this.ledStatus, ledIssue: this.ledIssue, midiCount: this.midiCount
     });
   }
@@ -135,7 +135,7 @@ export class TranslatorRuntime {
       }
       const result = this.engine.process(event); this.dispatch(result.messages);
       if (result.modeChanged) { this.performance.stripLastRaw = 0; lightsChanged = true; this.performance.activePads.clear(); this.emit({ type: 'mode' }); }
-      this.emit({ type: 'decoded', event });
+      this.emit({ type: 'decoded', event, handled: result.handled });
     }
     if (lightsChanged) this.refreshLights();
     if (decoded.events.length) this.publish();
@@ -159,6 +159,7 @@ export class TranslatorRuntime {
     // This operation only updates feedback settings, preserving held MIDI ownership.
     for (const mode of this.profile.modes) {
       const source = next.modes.find(m => m.id === mode.id)!;
+      mode.color = source.color;
       mode.buttonLight = source.buttonLight; mode.toggleButtonLight = source.toggleButtonLight; mode.padOnBrightness = source.padOnBrightness; mode.padOffBrightness = source.padOffBrightness;
     }
     this.refreshLights(); this.publish();

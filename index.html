@@ -180,10 +180,19 @@
               data-i18n="protocol_source">協定來源</span></a></span></footer>
     </main>
   </div>
-      <aside class="connection-dock" aria-label="裝置連線" data-i18n-aria-label="device_connection"><span id="device-status" class="status-pill"><span data-i18n="disconnected">●
-            尚未連線</span></span><button id="connect" class="primary"><span
-            data-i18n="connect_device">連接裝置</span></button><button id="disconnect" class="ghost" disabled><span
-            data-i18n="disconnect">中斷</span></button></aside>
+  <aside class="connection-dock" aria-label="裝置連線" data-i18n-aria-label="device_connection">
+    <div class="connection-status-row">
+      <span id="device-status" class="status-pill"><span data-i18n="disconnected">● 尚未連線</span></span>
+      <label class="led-toggle" title="接管 LED：開啟後由 MiDiY 控制裝置燈光，關閉時釋放控制。">
+        <input id="midi-led-enable" type="checkbox" aria-label="接管 LED 輸出" data-i18n-aria-label="take_over_led_output" disabled>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 17v-1.2a6 6 0 1 1 6 0V17M9 17h6M9.5 20h5M11 23h2M12 1V0M3.5 4.5 2 3M20.5 4.5 22 3M2 11H0M22 11h2"/>
+        </svg>
+      </label>
+    </div>
+    <button id="connect" class="primary"><span data-i18n="connect_device">連接裝置</span></button>
+    <button id="disconnect" class="ghost" disabled><span data-i18n="disconnect">中斷</span></button>
+  </aside>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./src/app.js"></script>
 </body>

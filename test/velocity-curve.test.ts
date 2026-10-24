@@ -28,16 +28,16 @@ test('curves are monotonic, preserve endpoints and increase Soft / Hard strength
   assert.equal(new Set(values).size, 7);
 });
 
-test('legacy profiles stay Linear; selected curves survive validation, storage and reload', () => {
-  const legacy = createDefaultProfile();
-  assert.equal(new MappingEngine(legacy).process(hit(64)).messages[0][2], 64);
-  assert.throws(() => parseProfile({ ...legacy, padVelocityCurve: 'unknown' }));
-  assert.throws(() => parseProfile({ ...legacy, padVelocityCurve: null }));
+test('default profiles use Linear; selected curves survive validation, storage and reload', () => {
+  const profile = createDefaultProfile();
+  assert.equal(new MappingEngine(profile).process(hit(64)).messages[0][2], 64);
+  assert.throws(() => parseProfile({ ...profile, padVelocityCurve: 'unknown' }));
+  assert.throws(() => parseProfile({ ...profile, padVelocityCurve: null }));
   const data = new Map<string, string>();
   const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
   const library = new ProfileLibrary(storage);
   for (const curve of PAD_VELOCITY_CURVES) {
-    library.save({ ...legacy, padVelocityCurve: curve });
+    library.save({ ...profile, padVelocityCurve: curve });
     assert.equal(new ProfileLibrary(storage).current.padVelocityCurve, curve);
     assert.equal(parseProfile(JSON.parse(JSON.stringify(library.current))).padVelocityCurve, curve);
   }
@@ -138,7 +138,7 @@ test('FIXED VEL toggles Pad Hit Note velocity, overrides ranges and curves, and 
   assert.equal(engine.process(hit2).messages[0][2], 53);
 });
 
-test('fixed velocity validates only on FIXED_VEL, survives serialization and resets with lifecycle', () => {
+test('fixed velocity validates general button bindings, survives serialization and resets with lifecycle', () => {
   const profile = createDefaultProfile();
   profile.modes[0].bindings.FIXED_VEL = { type: 'fixed-velocity', velocity: 1 };
   const restored = parseProfile(JSON.parse(JSON.stringify(profile)));
@@ -151,7 +151,7 @@ test('fixed velocity validates only on FIXED_VEL, survives serialization and res
   const invalid = structuredClone(profile);
   invalid.modes[0].bindings.PAD_1 = { type: 'fixed-velocity', velocity: 100 };
   assert.throws(() => parseProfile(invalid));
-  const second = structuredClone(profile.modes[0]); second.id = 'second'; profile.modes.push(second);
+  const second = structuredClone(profile.modes[0]); second.id = 'second'; second.selectorPad = null; profile.modes.push(second);
   for (const reset of ['flush', 'reset', 'reconfigure', 'mode'] as const) {
     const engine = new MappingEngine(profile);
     engine.process({ kind: 'button', controlId: 'FIXED_VEL', pressed: true });

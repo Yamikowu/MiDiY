@@ -35,7 +35,7 @@ test('port switch sends releases to old sink; Panic, unplug and reconnect clear 
 });
 test('profile reconfiguration and mode changes release notes without retriggering held pads', async () => {
   const profile = createDefaultProfile(); const second = structuredClone(profile.modes[0]);
-  second.id = 'second'; profile.modes.push(second);
+  second.id = 'second'; second.selectorPad = null; profile.modes.push(second);
   const { runtime, input, midi } = fixture(profile);
   await runtime.connect(); await runtime.selectOutput('a'); input.report(2, hit);
   runtime.switchMode('second'); assert.equal(runtime.snapshot.activeModeId, 'second');
@@ -71,7 +71,7 @@ test('LED write failure disables takeover and is exposed in state', async () => 
   assert.equal(runtime.snapshot.ledEnabled, false); assert.match(runtime.snapshot.ledStatus, /write failed/);
   assert.equal(runtime.snapshot.ledIssue?.code, 'led_send_failed');
 });
-test('capture limits, display clearing, stop, reset and legacy imports stay separate from MIDI', async () => {
+test('capture limits, display clearing, stop, reset and session imports stay separate from MIDI', async () => {
   const { runtime, input, midi } = fixture(); const research = new CaptureSession();
   runtime.subscribe(e => { if (e.type === 'raw') research.receive(e.report); });
   await runtime.connect(); await runtime.selectOutput('a'); research.start('PAD_1');
@@ -86,7 +86,7 @@ test('capture limits, display clearing, stop, reset and legacy imports stay sepa
   input.report(2, hit); assert.equal(research.recordingFull, true);
   assert.deepEqual(midi.sent.at(-1)!.message, [0x90, 36, 64]);
   research.reset(); assert.equal(research.recordingFull, false); assert.equal(research.session.reports.length, 0);
-  research.import({ schema: 'mpa-session-v1', reports: [], captures: [] });
+  research.import({ schema: 'midiy-session-v1', reports: [], captures: [] });
   assert.equal(research.session.schema, 'midiy-session-v1');
 });
 test('disconnect during connection finishes closing before a reconnect can run', async () => {

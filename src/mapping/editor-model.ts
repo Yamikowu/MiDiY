@@ -1,4 +1,4 @@
-import { CONTROL_IDS, PAD_IDS, parseProfile, type Binding, type ControlId, type Profile, type PressureBinding } from '@midiy/mikro-core';
+import { MODE_SELECTOR_BUTTONS, CONTROL_IDS, PAD_IDS, parseProfile, type Binding, type ControlId, type Profile, type PressureBinding } from '@midiy/mikro-core';
 
 export const isPadControl = (id: ControlId) => PAD_IDS.includes(id as `PAD_${number}`);
 export const orderedControls = (ids: Iterable<ControlId>) => { const selected = new Set(ids); return CONTROL_IDS.filter(id => selected.has(id)); };
@@ -15,16 +15,18 @@ export function controlsInRect(rects: readonly ControlRect[], a: { x: number; y:
 export function actionsFor(id: ControlId): string[] {
   if (id === 'ENCODER_ROTATE') return ['none', 'cc'];
   if (id === 'SMART_STRIP') return ['none', 'cc', 'poly-pressure', 'channel-pressure', 'program', 'pitchbend'];
-  return ['none', 'note', 'cc', 'poly-pressure', 'channel-pressure', 'program', 'pitchbend', 'mode', ...(id === 'FIXED_VEL' ? ['fixed-velocity'] : [])];
+  return ['none', 'note', 'cc', 'poly-pressure', 'channel-pressure', 'program', 'pitchbend', 'mode', ...(MODE_SELECTOR_BUTTONS.some(button => button === id) ? ['fixed-velocity'] : [])];
 }
 const family = (id: ControlId) => isPadControl(id) ? 'pad' : id === 'ENCODER_ROTATE' || id === 'SMART_STRIP' ? id : 'button';
 export function commonActions(ids: readonly ControlId[]) {
   if (!ids.length) return [];
   return actionsFor(ids[0]).filter(action => ids.every(id => actionsFor(id).includes(action))
+    && (action !== 'fixed-velocity' || ids.length === 1)
     && (action !== 'cc' || ids.every(id => family(id) === family(ids[0]))));
 }
 export function defaultBinding(action: string, id: ControlId, modeId: string): Binding {
   const channel = 1;
+  if (action === 'fixed-velocity') return { type: 'fixed-velocity', velocity: 127 };
   if (action === 'note') return { type: 'note', channel, note: 36, velocity: isPadControl(id) ? 'pad' : 127, mode: 'gate' };
   if (action === 'mode') return { type: 'mode', modeId };
   if (action === 'cc') return id === 'ENCODER_ROTATE'
@@ -152,7 +154,7 @@ export function pasteControls(profile: Profile, modeId: string, ids: readonly Co
   const next = structuredClone(profile), mode = next.modes.find(m => m.id === modeId)!;
   targets.forEach((id, index) => {
     const copy = copies[copies.length === 1 ? 0 : index];
-    if (family(id) !== family(copy.source) || copy.binding?.type === 'fixed-velocity' && id !== 'FIXED_VEL') throw new Error('paste_incompatible');
+    if (family(id) !== family(copy.source)) throw new Error('paste_incompatible');
     if (copy.binding) mode.bindings[id] = structuredClone(copy.binding); else delete mode.bindings[id];
     if (isPadControl(id)) {
       if (copy.pressure) (mode.pressureBindings ??= {})[id as `PAD_${number}`] = structuredClone(copy.pressure);

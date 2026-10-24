@@ -9,9 +9,8 @@ const profile = (mode:'dot'|'bar'|'pan'='dot') => {
  const p=createDefaultProfile();p.modes[0].stripLight={mode,brightness:'normal',hold:true};
  p.modes[0].bindings.SMART_STRIP_TOUCH={type:'note',channel:1,note:60,velocity:127};return p;
 };
-test('Strip hold is optional, boolean validated, and persists in legacy/current profiles and library',()=>{
+test('Strip hold is optional, boolean validated, and persists in profiles and library',()=>{
  const p=profile(); assert.equal(parseProfile(p).modes[0].stripLight?.hold,true);
- assert.equal(parseProfile({...p,schema:'mpa-profile-v1'}).modes[0].stripLight?.hold,true);
  delete p.modes[0].stripLight!.hold;assert.equal(parseProfile(p).modes[0].stripLight?.hold,undefined);
  for(const invalid of [0,'true',null]){(p.modes[0].stripLight as any).hold=invalid;assert.throws(()=>parseProfile(p));}
  const values=new Map<string,string>();const store={getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>{values.set(k,v);}};
@@ -35,7 +34,7 @@ test('default/off still extinguish Strip, and hold never implicitly takes over L
  }
 });
 test('Panic, mode changes, reapply, LED disable and reconnect clear retained Strip position',async()=>{
- const p=profile();p.modes.push({...structuredClone(p.modes[0]),id:'second',name:'Second'});
+ const p=profile();p.modes.push({...structuredClone(p.modes[0]),id:'second',name:'Second',selectorPad:null});
  const {runtime,input}=fixture(p);await runtime.connect();runtime.setLedEnabled(true);await tick();
  const touch=()=>{input.report(1,strip(125));input.report(1,strip(0));assert.ok(lights(runtime).some(Boolean));};
  touch();runtime.panic();assert.ok(lights(runtime).every(n=>n===0));

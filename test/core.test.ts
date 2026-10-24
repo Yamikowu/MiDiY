@@ -124,7 +124,7 @@ test('Press Note thresholds have hysteresis and share note ownership with Hit', 
   assert.deepEqual(pressureOnly.process(pad('aftertouch', 400, 2)).messages, [[0x81, 99, 0]]);
 });
 test('mode changes suppress held Pad pressure until physical release', () => {
-  const profile = createDefaultProfile(); profile.modes.push(createMode('b', 'Second'));
+  const profile = createDefaultProfile(); profile.modes = [profile.modes[0], createMode('b', 'Second')];
   profile.modes[1].pressureBindings = { PAD_1: { type: 'poly-pressure', channel: 1, note: 36, from: 0, to: 127 } };
   const engine = new MappingEngine(profile);
   engine.process(pad('note-on'));
@@ -135,7 +135,7 @@ test('mode changes suppress held Pad pressure until physical release', () => {
   assert.deepEqual(engine.process(pad('aftertouch')).messages, [[0xa0, 36, 64]]);
 });
 test('continuous Press outputs reset on release or mode switch', () => {
-  const profile = createDefaultProfile(); profile.modes.push(createMode('b', 'Second'));
+  const profile = createDefaultProfile(); profile.modes = [profile.modes[0], createMode('b', 'Second')];
   profile.modes[0].pressureBindings = {
     PAD_1: { type: 'cc', channel: 1, controller: 74, from: 10, to: 100 },
     PAD_2: { type: 'channel-pressure', channel: 2, from: 0, to: 127 },
@@ -164,7 +164,7 @@ test('one released Pad does not reset another Pad controlling the same pressure 
   assert.deepEqual(engine.process(pad('note-off', 0, 1)).messages, [[0xb0, 74, 0], [0x80, 36, 0]]);
 });
 test('note ownership survives profile changes and mode switches until release', () => {
-  const profile = createDefaultProfile(); profile.modes.push(createMode('b', 'Second'));
+  const profile = createDefaultProfile(); profile.modes = [profile.modes[0], createMode('b', 'Second')];
   profile.modes[0].bindings.SHIFT = { type: 'mode', modeId: 'b' };
   const engine = new MappingEngine(profile);
   engine.process(pad('note-on'));
@@ -266,14 +266,14 @@ test('general buttons support Action on for Note and value types', () => {
   profile.modes[0].bindings.SHIFT = { type: 'mcu-button', number: 12, mode: 'gate' } as any;
   assert.throws(() => parseProfile(profile));
 });
-test('legacy Pad Action on is removed when loading without rejecting saved profiles', () => {
+test('Pad Hit rejects Action on instead of rewriting it', () => {
   const profile = createDefaultProfile();
   profile.modes[0].bindings.PAD_1 = { type: 'cc', channel: 1, controller: 1, style: 'toggle', on: 127, off: 0, actionOn: 'up' };
-  assert.equal('actionOn' in parseProfile(profile).modes[0].bindings.PAD_1!, false);
+  assert.throws(() => parseProfile(profile));
   profile.modes[0].bindings.PAD_1 = { type: 'button-value', channel: 1, output: 'channel-pressure', mode: 'trigger', value: 100, actionOn: 'up' };
-  assert.equal('actionOn' in parseProfile(profile).modes[0].bindings.PAD_1!, false);
+  assert.throws(() => parseProfile(profile));
   profile.modes[0].bindings.PAD_1 = { type: 'note', channel: 1, note: 60, velocity: 100, mode: 'toggle', actionOn: 'up' };
-  assert.equal('actionOn' in parseProfile(profile).modes[0].bindings.PAD_1!, false);
+  assert.throws(() => parseProfile(profile));
 });
 test('Strip Position and Touch map independently and flush releases held touch', () => {
   const profile = createDefaultProfile();
@@ -347,7 +347,12 @@ test('Strip Position CC supports Absolute, Relative and Relative (Offset)', () =
 test('profile round-trip is detached and rejects values that could generate invalid MIDI', () => {
   const profile = createDefaultProfile(), parsed = parseProfile(JSON.parse(JSON.stringify(profile)));
   assert.deepEqual(parsed, profile); parsed.name = 'other'; assert.notEqual(parsed.name, profile.name);
-  assert.equal(parseProfile({ ...profile, schema: 'mpa-profile-v1' }).schema, 'midiy-profile-v1');
+  for (const schema of ['mpa-profile-v1', 'midiy-profile-v1']) assert.throws(() => parseProfile({ ...profile, schema }));
+  for (const key of ['buttonLight', 'toggleButtonLight', 'padOnBrightness', 'padOffBrightness']) {
+    const incomplete = structuredClone(profile); delete (incomplete.modes[0] as any)[key];
+    assert.throws(() => parseProfile(incomplete));
+  }
+  assert.throws(() => parseProfile({ ...profile, padVelocityCurve: undefined }));
   for (const binding of [ { type: 'note', channel: 0, note: 36, velocity: 100 }, { type: 'note', channel: 1, note: 128, velocity: 100 }, { type: 'mode', modeId: 'missing' }, { type: 'arbitrary' } ]) {
     const p = createDefaultProfile(); p.modes[0].bindings.PLAY = binding as any; assert.throws(() => parseProfile(p));
   }
@@ -374,10 +379,9 @@ test('button and Strip lights share the full 0x80 report with Pad dual colors', 
   const profile = createDefaultProfile();
   profile.modes[0].pads.forEach(pad => { pad.color = 0; pad.brightness = 'off'; });
   profile.modes[0].pads[0] = { color: 2, onColor: 1, brightness: 'dim' };
-  profile.modes[0].buttonLights = { PLAY: { off: 'dim', on: 'bright' } };
   profile.modes[0].stripLight = { mode: 'dot', brightness: 'normal' };
   const mode = parseProfile(profile).modes[0];
-  const state = { pads: mode.pads, buttons: mode.buttonLights, pressedPads: new Set(['PAD_1']),
+  const state = { pads: mode.pads, buttons: { PLAY: { off: 'dim' as const, on: 'bright' as const } }, pressedPads: new Set(['PAD_1']),
     pressedButtons: new Set(['PLAY']), strip: { raw: 1, mode: 'dot' as const, brightness: 'normal' as const } };
   const report = encodeLights(state);
   assert.equal(report.reportId, 0x80); assert.equal(report.data.length, 80);
@@ -417,11 +421,8 @@ test('Strip Dot, Bar and Pan map raw 1–200 from left to right', () => {
   assert.equal(encodeLights({ pads, strip: { raw: 1, mode: 'dot', brightness: 'normal' } }).data[55], 70);
   assert.throws(() => encodeLights({ pads, strip: { raw: 1, mode: 'dot', brightness: 'normal', color: 18 } }));
 });
-test('light settings reject invalid button slots, color and Strip mode', () => {
+test('light settings reject invalid brightness, color and Strip mode', () => {
   const profile = createDefaultProfile();
-  profile.modes[0].buttonLights = { ENCODER_TOUCH: { off: 'off', on: 'bright' } };
-  assert.throws(() => parseProfile(profile));
-  delete profile.modes[0].buttonLights;
   profile.modes[0].buttonLight = { off: 'dim', on: 'bright' };
   profile.modes[0].padOnBrightness = 'normal';
   assert.equal(parseProfile(profile).modes[0].buttonLight?.off, 'dim');

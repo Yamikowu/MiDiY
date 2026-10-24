@@ -35,21 +35,20 @@ respectively, with configurable step and full-swipe resolution; first touch
 establishes a baseline. Transitions between zero and nonzero generate independent Touch
 button events for MIDI mapping.
 
-`Profile` has schema `midiy-profile-v1`, name, initialModeId, and modes containing
+`Profile` has schema `midiy-profile-v2`, name, initialModeId, and modes containing
 stable ControlId bindings and 16 physical Pad 1–16 light settings. Channels are
 1–16, Note/CC/Program values are 0–127. Bindings are discriminated unions exported
 in the declarations: none, note (Gate/Toggle), cc (Gate/Toggle/Trigger/Inc/encoder/strip),
 button-value (Poly/Channel Pressure, Program, Pitchbend), strip-position, value,
 system, program, mode. `parseProfile(unknown)` validates
-before use and returns a detached copy. Legacy `mpa-profile-v1` files remain
-importable and are normalized to the MiDiY schema.
+before use and returns a detached copy. Only v2 profiles are accepted; velocity
+curve and shared Pad/button/Toggle brightness fields are required.
 Port identifiers, browser objects and application callbacks do not belong here.
 
 `MappingEngine.process()` returns MIDI byte arrays and a modeChanged flag. Pad
 PressOn/NoteOn pairs are deduplicated. Optional per-pad `pressureBindings` keep
 Press independent from the Hit binding and can map aftertouch to Note thresholds,
-CC, Poly Pressure, Channel Pressure or Pitchbend. A missing field stays off for
-older profiles. Pressure is scaled from the decoded 12-bit raw value; output
+CC, Poly Pressure, Channel Pressure or Pitchbend. Omitted pressure bindings are off. Pressure is scaled from the decoded 12-bit raw value; output
 resets on release, reconfiguration, mode switches and Panic. Notes shared by
 multiple held controls remain on until the
 last owner releases. `switchMode()` and `reconfigure()` release sounding notes
