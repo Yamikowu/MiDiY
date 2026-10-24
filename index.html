@@ -26,10 +26,7 @@
           <button type="button" data-locale="en" lang="en" aria-pressed="false">EN</button>
         </div>
       </div>
-      <div class="top-actions"><span id="device-status" class="status-pill"><span data-i18n="disconnected">●
-            尚未連線</span></span><button id="connect" class="primary"><span
-            data-i18n="connect_device">連接裝置</span></button><button id="disconnect" class="ghost" disabled><span
-            data-i18n="disconnect">中斷</span></button></div>
+
     </header>
     <nav class="page-nav" role="tablist" aria-label="工作區" data-i18n-aria-label="workspace">
       <a id="tab-testing" href="#testing" role="tab" data-page="testing" aria-controls="page-testing"
@@ -183,6 +180,10 @@
               data-i18n="protocol_source">協定來源</span></a></span></footer>
     </main>
   </div>
+      <aside class="connection-dock" aria-label="裝置連線" data-i18n-aria-label="device_connection"><span id="device-status" class="status-pill"><span data-i18n="disconnected">●
+            尚未連線</span></span><button id="connect" class="primary"><span
+            data-i18n="connect_device">連接裝置</span></button><button id="disconnect" class="ghost" disabled><span
+            data-i18n="disconnect">中斷</span></button></aside>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./src/app.js"></script>
 </body>

@@ -1,5 +1,6 @@
 import type { MessageKey } from './zh-TW';
 export const en = {
+  "device_connection": "Device connection",
   "strip_hold_light": "Keep light on after release",
   "note_pitch": "Pitch",
   "note_octave": "Octave",

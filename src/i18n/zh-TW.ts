@@ -1,4 +1,5 @@
 export const zhTW = {
+  "device_connection": "裝置連線",
   "strip_hold_light": "放開後保留燈光",
   "note_pitch": "音名",
   "note_octave": "八度",

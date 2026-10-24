@@ -125,12 +125,6 @@ button {
   margin-top: 6px;
 }
 
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
 .status-pill {
   font-size: 11px;
   color: var(--muted);
@@ -809,14 +803,6 @@ footer a:hover {
     gap: 14px;
   }
 
-  .top-actions {
-    width: 100%;
-  }
-
-  .top-actions .status-pill {
-    margin-right: auto;
-  }
-
   .page-nav {
     margin: 0 16px;
     gap: 24px;
@@ -995,4 +981,41 @@ footer a:hover {
   .language-switch button {
     padding: 0 7px;
   }
+}
+/* Viewport-anchored device controls, shared by Mapping and Testing. */
+.app-shell { padding-bottom:180px; }
+.connection-dock {
+  position:fixed;
+  right:max(24px, env(safe-area-inset-right));
+  bottom:max(24px, env(safe-area-inset-bottom));
+  z-index:15;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  width:148px;
+  padding:12px;
+  background:rgba(27,27,27,.96);
+  border:1px solid var(--line);
+  border-radius:10px;
+  box-shadow:0 8px 30px #0005, 0 1px 3px #0004;
+  backdrop-filter:blur(12px);
+}
+.connection-dock .status-pill {
+  margin:0 0 2px;
+  padding:2px 2px 10px;
+  border-bottom:1px solid var(--line);
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.connection-dock button { width:100%; }
+@media (max-width:680px) {
+  .connection-dock {
+    right:max(12px, env(safe-area-inset-right));
+    bottom:max(12px, env(safe-area-inset-bottom));
+    width:132px;
+    padding:10px;
+    gap:6px;
+  }
+  .connection-dock button { padding:8px 10px; min-height:36px; }
+  #toast { bottom:184px; }
 }
