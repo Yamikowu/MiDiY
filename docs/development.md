@@ -75,3 +75,9 @@ JSON 匯出名稱維持 `midiy-session-<timestamp>.json`；候選 CSV 維持 `mi
 `src/shared/notes/note-format.ts` 負責純換算與獨立偏好儲存，`note-input.ts` 負責網頁控制項；Runtime、Driver、Profile 格式不接收顯示偏好。數字欄位保留為編輯器的標準值，偏好刷新不派送表單事件。
 
 執行 `npm test` 驗證全部音符的換算、偏好儲存及已連線 Runtime 的無副作用切換。執行 `npm start` 後開啟 `/test/browser/note-preferences.html`，可用實際編輯器與 Runtime 搭配假 Adapter 做瀏覽器回歸。該頁使用記憶體儲存，不讀寫使用者 Profile；「Simulate connection + MIDI + LED」啟動模擬裝置，「Check state」顯示設定、草稿及發送／事件計數。此工具不代表實機驗證。
+
+## 效能回放
+
+`/test/browser/performance.html` 以真實 UI／Runtime 和模擬 I/O 回放固定 Pad 序列，暖機後比較 Mapping、Testing、日誌暫停三個場景。`performance-results` 包含每筆同步回呼耗時、animation frame 回呼耗時、表格替換與 Mapping 更新次數、snapshot 讀取次數、MIDI／HID 數量及序列摘要。先確認 status 為 complete 且 allRecorded 為 true，再比較相同環境的多次結果；測試資料與正式 Profile 分開。
+
+畫面日誌允許按顯示週期合併更新；原始資料、映射、MIDI 與實體 LED 必須保持各自的即時生命週期。比較時要把延後的畫面工作計入，不能只報同步回呼變短。方法、限制與本輪結果見[效能驗證紀錄](verification/2026-10-26-performance.md)。

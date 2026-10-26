@@ -48,6 +48,10 @@ UI 的 editorModeId 與 Runtime 演奏模式分離。瀏覽 Mode 只更新編輯
 
 `src/styles/index.css` 明確載入基礎、應用外框、Mikro 硬體圖、Mapping、Research。通用外框與元件樣式按功能集中；硬體尺寸、燈光與控制項外觀留在裝置目錄。已刪除被同條件、同選擇器後續規則覆蓋的宣告；不同斷點的規則仍保留條件與相對順序。
 
+### 高頻顯示更新
+
+Research 在 raw 回呼中逐筆記錄，表格與報告計數用 FrameTask 合併到下一個顯示週期；手動重畫及 dispose 會取消過期排程。Mapping 只在演奏模式、按壓、模式選擇或 LED 報告內容改變時更新即時硬體圖，裝置／MIDI 狀態另行更新。這些顯示優化不合併 Runtime 事件，也不延後映射、MIDI 或實體 LED。
+
 ## 目前 Runtime 介面
 
 以下為目前 Mikro Runtime 的介面與生命週期，不是所有未來裝置已共同支援的 API。基本 I/O 契約定義在 `src/runtime/contracts.ts`；Runtime snapshot 與事件定義在裝置的 `runtime.ts`。原始報告使用 `{ reportId, data: Uint8Array }`，payload 不含 ID；裝置資訊只包含序列化欄位。MIDI 狀態包含可選埠與目前埠，不暴露瀏覽器物件。

@@ -219,6 +219,27 @@ try {
  el<HTMLTextAreaElement>('capture-note').value='Retained testing note';
  setLocale('en');
  check(el<HTMLTextAreaElement>('capture-note').value==='Retained testing note' && el('metric-captures').textContent==='1','Testing locale change preserves notes and captures');
+ // High-rate raw collection stays lossless while the table paints once per frame.
+ const countBeforeBurst=Number(el('metric-reports').textContent!.replaceAll(',',''));
+ await click('start-capture');
+ let rawPaints=0;const rawObserver=new MutationObserver(records=>{rawPaints+=records.filter(record=>record.target===el('report-rows')).length;});
+ rawObserver.observe(el('report-rows'),{childList:true});
+ for(let i=0;i<96;i++) input.report(2,[0,0x48,i+1]);
+ check(Number(el('metric-reports').textContent!.replaceAll(',',''))===countBeforeBurst,'Raw display is deferred while report collection continues synchronously');
+ await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+ check(Number(el('metric-reports').textContent!.replaceAll(',',''))===countBeforeBurst+96 && rawPaints===1,'A 96-report burst paints one table with the full report count');
+ rawObserver.disconnect();await click('stop-capture');
+ check(el('capture-list').textContent!.includes('96') && el('metric-captures').textContent==='2','Burst capture retains every sample for analysis');
+ const pausedRows=el('report-rows').innerHTML;
+ el<HTMLInputElement>('pause-log').checked=true;el('pause-log').dispatchEvent(new Event('change'));
+ for(let i=0;i<16;i++) input.report(2,[0,0x48,i+1]);
+ await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+ check(el('report-rows').innerHTML===pausedRows && Number(el('metric-reports').textContent!.replaceAll(',',''))===countBeforeBurst+112,'Paused log keeps its rows while collection and the counter continue');
+ el<HTMLInputElement>('pause-log').checked=false;el('pause-log').dispatchEvent(new Event('change'));
+ check(el('report-rows').querySelectorAll('tr').length===100,'Resuming the log immediately shows the latest 100 reports');
+ input.report(2,[0,0x48,50]);await click('clear-log');
+ await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+ check(el('report-rows').querySelector('.table-empty') && Number(el('metric-reports').textContent!.replaceAll(',',''))===countBeforeBurst+113,'Clear cancels a pending table paint without deleting collected reports');
  check(document.documentElement.scrollWidth<=innerWidth,'Testing has no page overflow');
  window.scrollTo(0,200);await pause();
  check(Math.abs(document.querySelector('.topbar')!.getBoundingClientRect().top)<1,'Navigation remains at top while scrolling Testing');

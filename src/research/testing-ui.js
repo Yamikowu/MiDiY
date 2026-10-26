@@ -1,3 +1,4 @@
+import { FrameTask } from '../shared/frame-task';
 import { t, l, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import { hex, reportHex, summarizeCapture, normalizeImport } from './analysis.js';
 import { CaptureSession, MAX_REPORTS } from './capture-session.js';
@@ -9,6 +10,11 @@ export function mountTesting(runtime, toast, { controls, getControl, renderHardw
   let selected = initialControlId;
   let displayedCapture = null;
   let device = runtime.snapshot.device;
+  // Every raw report is recorded immediately; only its display waits for a paint.
+  const reportFrame = new FrameTask(() => {
+    if (!$('pause-log').checked) renderReportRows();
+    else $('metric-reports').textContent = model.session.reports.length.toLocaleString();
+  }, callback => requestAnimationFrame(callback), id => cancelAnimationFrame(id));
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   }
@@ -49,11 +55,12 @@ export function mountTesting(runtime, toast, { controls, getControl, renderHardw
       }
       return;
     }
-    if (!$('pause-log').checked) renderReportRows();
-    $('metric-reports').textContent = model.session.reports.length.toLocaleString();
+    reportFrame.request();
   }
 
   function renderReportRows() {
+    reportFrame.cancel();
+    $('metric-reports').textContent = model.session.reports.length.toLocaleString();
     $('report-rows').innerHTML = model.displayRows.length ? model.displayRows.map(record => `<tr><td>${escapeHtml(new Date(record.time).toLocaleTimeString(getLocale(), { hour12: false, fractionalSecondDigits: 3 }))}</td><td>0x${hex(record.reportId)}</td><td>${record.bytes.length}</td><td>${record.changedOffsets.length ? record.changedOffsets.map(offset => `+${offset}`).join(', ') : '—'}</td><td class="raw">${reportHex(record.bytes)}</td></tr>`).join('') : `<tr><td colspan="5" class="table-empty">${l('waiting_for_hid_input_report', {})}</td></tr>`;
   }
 
@@ -170,5 +177,5 @@ export function mountTesting(runtime, toast, { controls, getControl, renderHardw
     else renderCaptureResult(displayedCapture);
     $('midi-count').textContent = t('midi_messages', { p0: runtime.snapshot.midiCount });
   });
-  return () => { unsubscribeLocale(); unsubscribe(); if (frame) cancelAnimationFrame(frame); };
+  return () => { reportFrame.cancel(); unsubscribeLocale(); unsubscribe(); if (frame) cancelAnimationFrame(frame); };
 }

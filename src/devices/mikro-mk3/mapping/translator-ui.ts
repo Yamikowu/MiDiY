@@ -1,3 +1,4 @@
+import { performanceViewKey } from './performance-view';
 import {
   type Binding, type Brightness, type ControlId,
   type InputEvent,
@@ -163,14 +164,18 @@ export class TranslatorUI {
     };
     this.mount();
     this.notePreferences.subscribe(() => this.refreshNoteDisplay());
-    let midiStatus = '', deviceStatus = '';
+    let midiStatus = '', deviceStatus = '', performanceView = '';
     runtime.subscribe(event => {
       if (event.type === 'state') {
         const midi = JSON.stringify(event.state.midi);
         const device = JSON.stringify([event.state.device, event.state.ledEnabled, event.state.ledStatus]);
         if (device !== deviceStatus) { deviceStatus = device; this.renderDevice(); }
         if (midi !== midiStatus) { midiStatus = midi; this.renderPorts(); }
-        this.renderPlayingMode(); this.renderPressed(); this.queueModeLights(); this.previewBatch();
+        const view = performanceViewKey(event.state);
+        if (view !== performanceView) {
+          performanceView = view;
+          this.renderPlayingMode(); this.renderPressed(); this.queueModeLights(); this.previewBatch();
+        }
       } else if (event.type === 'decoded' && !event.handled) this.handleEvent(event.event);
       else if (event.type === 'mode') {
         // Hardware mode changes may follow in the clean mapping editor; never replace Mode browsing or a draft.
