@@ -1,11 +1,9 @@
-/* Physical placement follows the controller overview and detail drawings in
-   the NI Maschine Mikro MK3 manual, Quick Reference pp. 8-14. */
+/* Physical placement follows the NI Maschine Mikro MK3 manual, Quick Reference pp. 8–14. */
+/* hardware: rules owned here; loaded through styles/index.css. */
 .hardware-scroll {
   overflow-x: auto;
   padding: 2px 2px 12px;
-}
-
-.hardware {
+}.hardware {
   container-type: inline-size;
   width: 100%;
   min-width: 680px;
@@ -16,9 +14,7 @@
   background: #242424;
   border: 2px solid #484848;
   box-shadow: inset 0 0 0 4px #141414, 0 13px 25px #0004;
-}
-
-.device-face {
+}.device-face {
   --face-height: calc(100cqw / 1.82);
   --zone-inset: 7px;
   /* 6px padding + 1px border */
@@ -43,80 +39,18 @@
   grid-template-columns: 40% 58%;
   gap: 2%;
   aspect-ratio: 1.82;
-}
-
-.device-left {
+}.device-left {
   display: grid;
   /* Top controls / logo / performance / gap / transport, from the supplied reference. */
   grid-template-rows: 25% 10.5% 40.5% 2.5% 21.5%;
   min-width: 0;
   min-height: 0;
-}
-
-.device-upper {
+}.device-upper {
   display: grid;
   grid-template-columns: 13% 85%;
   gap: 2%;
   min-height: 0;
-}
-
-.browser-zone {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: repeat(3, var(--short-key-height));
-  align-content: space-between;
-  gap: 4px;
-  min-height: 0;
-  padding: var(--upper-inset) calc(var(--face-height) * .014);
-  border: 1px solid #3d3d3d;
-  border-radius: 3px;
-  background: #1c1c1c;
-}
-
-.edit-zone {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, var(--left-key-width));
-  gap: var(--left-key-gap);
-  min-height: 0;
-  padding: var(--upper-inset) 6px;
-  border: 1px solid #3d3d3d;
-  border-radius: 3px;
-  background: #1c1c1c;
-}
-
-.display-encoder,
-.quick-edit,
-.edit-tools {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  gap: 4px;
-}
-
-.display-encoder .screen {
-  flex-shrink: 0;
-  height: var(--short-key-height);
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 2px solid #383838;
-  background: #10130f;
-  box-shadow: inset 0 0 8px #0008;
-}
-
-.display-encoder {
-  width: 80%;
-  justify-self: start;
-  margin-left: 4%;
-}
-
-.quick-edit,
-.edit-tools {
-  justify-content: space-between;
-}
-
-.encoder-cluster {
+}.encoder-cluster {
   position: relative;
   display: block;
   flex: none;
@@ -125,18 +59,12 @@
   min-height: 0;
   align-self: center;
   margin: auto 0;
-}
-
-.encoder-cluster .encoder,
-.encoder-cluster .touch,
-.encoder-cluster .push {
+}.encoder-cluster .encoder, .encoder-cluster .touch, .encoder-cluster .push {
   position: absolute;
   border-radius: 50%;
   padding: 0;
   text-align: center;
-}
-
-.encoder-cluster .encoder {
+}.encoder-cluster .encoder {
   inset: 0;
   width: 100%;
   height: 100%;
@@ -144,9 +72,7 @@
   aspect-ratio: 1;
   background: radial-gradient(circle, #343434 0 53%, #141414 54% 57%, #404040 58% 61%, #171717 62% 65%, #3d3d3d 66% 69%, #202020 70%);
   font-size: 18px;
-}
-
-.encoder-cluster .push {
+}.encoder-cluster .push {
   width: 39%;
   height: 39%;
   top: 50%;
@@ -155,9 +81,7 @@
   z-index: 2;
   background: #303030;
   font-size: 10px;
-}
-
-.encoder-cluster .touch {
+}.encoder-cluster .touch {
   width: 72%;
   height: 72%;
   top: 50%;
@@ -165,22 +89,9 @@
   transform: translate(-50%, -50%);
   z-index: 1;
   background: radial-gradient(circle, #303030 0 55%, #191919 57% 66%, #3d3d3d 70% 88%, #151515 91%);
-}
-
-.quick-edit .hw-button,
-.edit-tools>.hw-button {
+}.quick-edit .hw-button, .edit-tools>.hw-button {
   flex: 0 0 var(--short-key-height);
-}
-
-.arrows {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 4px;
-  flex: 0 0 var(--short-key-height);
-  min-height: 0;
-}
-
-.device-logo {
+}.device-logo {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -189,99 +100,30 @@
   letter-spacing: .01em;
   color: #e4e4dd;
   padding-left: 4px;
-}
-
-.device-logo span {
+}.device-logo span {
   color: #747470;
   font: 8px monospace;
-}
-
-.performance-zone {
-  display: grid;
-  grid-template-rows: var(--short-key-height) var(--strip-lights-height) var(--strip-height) minmax(0, 1fr);
-  gap: 2%;
-  min-height: 0;
-  padding: 6px;
-  border: 1px solid #3d3d3d;
-  border-radius: 3px;
-  background: #1c1c1c;
-}
-
-.performance-actions {
-  height: var(--action-key-height);
-  align-self: end;
-  margin-bottom: calc(var(--face-height) * .02);
-}
-
-.strip-modes,
-.performance-actions,
-.transport-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
-  column-gap: var(--left-key-gap);
-  min-height: 0;
-}
-
-.strip-lights {
+}.strip-lights {
   display: grid;
   grid-template-columns: repeat(25, minmax(0, 1fr));
   align-items: end;
   justify-items: center;
   overflow: hidden;
   padding: 0 3% 1px;
-}
-
-.strip-light {
+}.strip-light {
   width: 3px;
   height: 3px;
   border-radius: 50%;
   background: #666660;
   box-shadow: 0 0 2px #a9a99b33;
-}
-
-.strip-light.is-lit {
+}.strip-light.is-lit {
   background: var(--strip-led-color, #dce6b7);
   box-shadow: 0 0 5px var(--strip-led-color, #dce6b7);
-}
-
-.strip-light.is-lit[data-brightness=dim] {
+}.strip-light.is-lit[data-brightness=dim] {
   opacity: .55;
-}
-
-.strip-light.is-lit[data-brightness=bright] {
+}.strip-light.is-lit[data-brightness=bright] {
   box-shadow: 0 0 8px var(--strip-led-color, #e9f5bc);
-}
-
-.performance-zone .strip {
-  display: block;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  background: #292929;
-  border: 3px solid #151515;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px #454545;
-  font-size: 10px;
-}
-
-.transport-zone {
-  grid-row: 5;
-  min-height: 0;
-  padding: var(--upper-inset) 6px;
-  border: 1px solid #3d3d3d;
-  border-radius: 3px;
-  background: #1c1c1c;
-}
-
-.transport-grid {
-  grid-template-rows: var(--short-key-height) var(--action-key-height);
-  align-content: space-between;
-  row-gap: 0;
-  height: 100%;
-}
-
-.device-right {
+}.device-right {
   --mode-key-width: 15%;
   --pad-column-gap: var(--pad-gap);
   display: grid;
@@ -293,39 +135,12 @@
   border: 1px solid #3d3d3d;
   border-radius: 3px;
   background: #1c1c1c;
-}
-
-.padmode-grid {
-  display: grid;
-  grid-template-columns: var(--mode-key-width) repeat(4, minmax(0, 1fr));
-  gap: var(--pad-column-gap);
-  min-height: 0;
-}
-
-.pad-area {
+}.pad-area {
   display: grid;
   grid-template-columns: var(--mode-key-width) minmax(0, 1fr);
   gap: var(--pad-column-gap);
   min-height: 0;
-}
-
-.mode-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: repeat(8, 1fr);
-  gap: var(--mode-gap);
-  min-height: 0;
-}
-
-.pads {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  gap: var(--pad-column-gap);
-  min-height: 0;
-}
-
-.hardware .hw-button {
+}.hardware .hw-button {
   min-height: 0;
   padding: 3px 4px;
   font-size: 8px;
@@ -334,47 +149,25 @@
   white-space: normal;
   overflow-wrap: anywhere;
   overflow: hidden;
-}
-
-.hardware .icon-key,
-.hardware .arrows .hw-button,
-.hardware .encoder-cluster .hw-button {
+}.hardware .icon-key, .hardware .arrows .hw-button, .hardware .encoder-cluster .hw-button {
   text-align: center;
   overflow-wrap: normal;
-}
-
-.hardware .icon-key {
+}.hardware .icon-key {
   font-size: clamp(10px, 1.5cqw, 14px);
   padding: 1px 2px;
-}
-
-.hardware .strip-modes .hw-button,
-.hardware .performance-actions .hw-button,
-.hardware .quick-edit .hw-button,
-.hardware .edit-tools .hw-button,
-.hardware .transport-grid .hw-button,
-.hardware .padmode-grid .hw-button {
+}.hardware .strip-modes .hw-button, .hardware .performance-actions .hw-button, .hardware .quick-edit .hw-button, .hardware .edit-tools .hw-button, .hardware .transport-grid .hw-button, .hardware .padmode-grid .hw-button {
   padding: 2px 3px;
-}
-
-.hardware .pad {
+}.hardware .pad {
   width: 100%;
   height: 100%;
   aspect-ratio: auto;
-  padding: 7px 5px;
   font-size: 11px;
   align-content: start;
-}
-
-.hardware .hw-button:hover {
+}.hardware .hw-button:hover {
   background-color: #484848;
-}
-
-.hardware .hw-button.selected {
+}.hardware .hw-button.selected {
   background: #484844;
-}
-
-@media (max-width: 720px) {
+}@media (max-width: 720px) {
   .hardware-scroll {
     margin-right: -15px;
   }
@@ -382,10 +175,7 @@
   .hardware {
     margin: 0;
   }
-}
-
-/* Rubber keys, restrained contrast and light cues reflect the hardware surface. */
-.hw-button {
+}.hw-button {
   position: relative;
   min-width: 0;
   background: #303030;
@@ -395,20 +185,14 @@
   color: #d0d0c8;
   font-family: var(--mono);
   transition: background .15s, border-color .15s;
-}
-
-.hw-button.selected {
+}.hw-button.selected {
   border-color: #edede6;
   outline: 1px solid #edede6;
   outline-offset: 2px;
   color: #fff;
-}
-
-.hw-button.captured {
+}.hw-button.captured {
   border-color: #8e9c76;
-}
-
-.hw-button.is-mapped:not(.pad)::after {
+}.hw-button.is-mapped:not(.pad)::after {
   content: '';
   position: absolute;
   width: 3px;
@@ -417,9 +201,7 @@
   right: 3px;
   bottom: 3px;
   background: #c3d4a6;
-}
-
-.hardware .pad {
+}.hardware .pad {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -429,66 +211,59 @@
   border: 1px solid #a4a49c;
   border-bottom: 3px solid #74746e;
   border-radius: 4px;
-}
-
-.pad-label {
+}.pad-label {
   font: 500 14px var(--mono);
   color: #44443f;
-}
-
-.pad-assignment {
+}.pad-assignment {
   font: 7px var(--mono);
   color: #4c4c46;
   letter-spacing: -.04em;
-  min-height: 9px;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.hardware .pad.has-light {
+}.hardware .pad.has-light {
   border-top: 3px solid var(--pad-color);
   background: color-mix(in srgb, var(--pad-color) 82%, #c9c8be);
-}
-
-.hardware .pad.has-light[data-brightness=dim] {
+}.hardware .pad.has-light[data-brightness=dim] {
   background: color-mix(in srgb, var(--pad-color) 60%, #c9c8be);
-}
-
-.hardware .pad.has-light[data-brightness=bright] {
+}.hardware .pad.has-light[data-brightness=bright] {
   background: var(--pad-color);
-}
-
-.hardware .pad.selected {
+}.hardware .pad.selected {
   border-color: #f3f1e8;
-}
-
-.hardware .pad.selected:not(.has-light),
-.hardware .pad:not(.has-light):hover {
+}.hardware .pad.selected:not(.has-light), .hardware .pad:not(.has-light):hover {
   background: #deddd2;
-}
-
-.hardware .pad.has-light:hover {
+}.hardware .pad.has-light:hover {
   filter: brightness(1.08);
-}
-
-.hardware .hw-button:focus-visible {
+}.hardware .hw-button:focus-visible {
   outline: 2px solid #d9e6b1;
   outline-offset: 2px;
   z-index: 2;
-}
-
-#hardware .pad-label {
+}#hardware .pad-label {
   font-size: 12px;
-}
-
-#hardware .pad-assignment {
+}#hardware .pad-assignment {
   display: none;
-}
-
-/* Keep both note identity and channel visible within the existing Pad geometry. */
-.pad-assignment {
+}.pad-assignment {
   white-space: pre-line;
   line-height: 1.3;
   min-height: 18px;
-}
+}.hw-button.pad.is-pressed {
+  outline: 2px solid #dce6b7;
+  outline-offset: 1px;
+  filter: brightness(1.3);
+}.mapping-device .hw-button.is-pressed:not(.pad) {
+  outline: 1px solid #edede6;
+  outline-offset: 2px;
+}.hw-button.has-button-light:not(.pad) {
+  color: #e9f5bc;
+  text-shadow: 0 0 4px #dce6b7aa;
+}.hw-button.has-button-light:not(.pad)[data-light-brightness=dim] {
+  text-shadow: 0 0 2px #dce6b766;
+}.hw-button.has-button-light:not(.pad)[data-light-brightness=bright] {
+  text-shadow: 0 0 6px #e9f5bcee, 0 0 10px #dce6b7aa;
+}.mapping-edit-actions .hardware-follow-toggle {
+  white-space: nowrap;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}button:not(:disabled):not(.hw-button):hover { border-color: #666d5b; }.mapping-edit-actions .hardware-follow-toggle { margin-left: auto; }@media (max-width:680px) {
+  .mapping-edit-actions .hardware-follow-toggle { width: 100%; margin: 4px 0 0; }
+}.mode-preview .hw-button:not(.is-mapped) { opacity: .35; }.mode-preview .hw-button.is-mode-current:not(.pad) { outline: 1px solid var(--accent); outline-offset: 2px; }.mode-preview .pad-assignment { white-space: nowrap; }

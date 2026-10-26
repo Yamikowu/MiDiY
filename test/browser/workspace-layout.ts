@@ -1,13 +1,16 @@
+import { mikroResearch } from '../../src/devices/mikro-mk3/research';
 // Isolated browser regression: real UI/runtime, in-memory profiles and simulated I/O.
 import { BUTTON_IDS, padNumberToIndex } from '@midiy/mikro-core';
 import page from '../../index.html?raw';
 import { fixture } from '../runtime-fixture';
-import { TranslatorUI } from '../../src/mapping/translator-ui';
-import { ProfileLibrary } from '../../src/mapping/profile-library';
-import { NotePreferences } from '../../src/mapping/note-format';
+import { TranslatorUI } from '../../src/devices/mikro-mk3/mapping/translator-ui';
+import { ProfileLibrary } from '../../src/devices/mikro-mk3/mapping/profile-library';
+import { NotePreferences } from '../../src/shared/notes/note-format';
 import { initializeLocale, mountLanguageSwitcher, setLocale } from '../../src/i18n/index';
 import { mountTesting } from '../../src/research/testing-ui.js';
 import { mountPages } from '../../src/shared/pages';
+// Every run starts on Mapping, including reloads after a run visited Testing.
+history.replaceState(null, '', '#mapping');
 document.documentElement.innerHTML = page.replace(/<script[\s\S]*?<\/script>/g, '').replaceAll('href="./', 'href="/');
 const values = new Map<string,string>();
 const storage = {getItem: (k:string) => values.get(k) ?? null, setItem: (k:string,v:string) => { values.set(k,v); }};
@@ -15,7 +18,7 @@ initializeLocale(storage, ['zh-TW']); mountLanguageSwitcher();
 const library = new ProfileLibrary(storage);
 const {runtime,input,midi} = fixture(library.current);
 new TranslatorUI(runtime, library, {toast() {}, notePreferences: new NotePreferences(storage)});
-mountTesting(runtime, () => {});
+mountTesting(runtime, () => {}, mikroResearch);
 mountPages();
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const pause = () => new Promise(resolve => setTimeout(resolve, 10));
@@ -173,6 +176,27 @@ try {
  el('midi-hardware').querySelector<HTMLButtonElement>('[data-control="PROJECT"]')!.click();await pause();
  check(el('midi-pad-tabs').hidden && !el('midi-hit-panel').hidden,'Ordinary buttons do not display Pad or Strip subtabs');
  el('midi-hardware').querySelector<HTMLButtonElement>('[data-control="PAD_1"]')!.click();await pause();await click('midi-hit-tab');
+ // Internal mapping clipboard and history shortcuts retain the apply boundary.
+ const shortcut=(key:string,shiftKey=false)=>el('midi-hardware').dispatchEvent(new KeyboardEvent('keydown',{key,ctrlKey:true,shiftKey,bubbles:true}));
+ const beforePaste=JSON.stringify(library.current), pasteIO=[input.sent.length,midi.sent.length];
+ const sourceBinding=structuredClone(library.current.modes.find(m=>m.id===editedModeId())!.bindings.PAD_1);
+ shortcut('c');
+ el('midi-hardware').querySelector<HTMLButtonElement>('[data-control="PAD_3"]')!.click();await pause();
+ shortcut('v');await pause();
+ check(JSON.stringify(library.current)===beforePaste && input.sent.length===pasteIO[0] && midi.sent.length===pasteIO[1] && el('midi-draft-state').textContent==='尚未套用','Copy/paste shortcuts stage a draft without storage or physical output');
+ await click('midi-apply');
+ check(JSON.stringify(library.current.modes.find(m=>m.id===editedModeId())!.bindings.PAD_3)===JSON.stringify(sourceBinding),'Paste applies the copied binding only after Apply');
+ shortcut('z');await pause();
+ check(JSON.stringify(library.current)===beforePaste,'Undo shortcut restores the previous saved profile');
+ shortcut('z',true);await pause();
+ check(JSON.stringify(library.current.modes.find(m=>m.id===editedModeId())!.bindings.PAD_3)===JSON.stringify(sourceBinding),'Redo shortcut restores the applied paste');
+ el('midi-hardware').querySelector<HTMLButtonElement>('[data-control="PAD_1"]')!.click();await pause();
+ await change('bind-note','61');
+ const canonicalNote=el<HTMLInputElement>('bind-note'), prefsProfile=JSON.stringify(library.current), prefsIO=[input.sent.length,midi.sent.length];
+ await change('midi-note-octave','3');await change('midi-note-input-mode','name');
+ check(el('bind-note')===canonicalNote && canonicalNote.value==='61' && el('midi-draft-state').textContent==='尚未套用','Note octave and input preferences preserve the canonical field and unapplied draft');
+ check(JSON.stringify(library.current)===prefsProfile && input.sent.length===prefsIO[0] && midi.sent.length===prefsIO[1],'Note preferences do not save a Profile or send physical I/O');
+ await change('midi-note-input-mode','number');await change('midi-note-octave','4');await click('midi-apply');
  for(const id of ['midi-profile-edit','midi-profile-duplicate','midi-mode-edit','midi-add-mode']) check(!!el(id).querySelector('svg') && !!el(id).getAttribute('aria-label'),'Toolbar icon has accessible label: '+id);
  if(innerWidth>900) check(Math.abs(el('midi-mode').getBoundingClientRect().top-el('midi-mode-selector').getBoundingClientRect().top)<1 && Math.abs(el('midi-mode').getBoundingClientRect().height-el('midi-mode-selector').getBoundingClientRect().height)<1,'Mode and selector dropdowns align exactly');
  await change('midi-pad-velocity-curve','hard-2');

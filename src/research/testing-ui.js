@@ -1,13 +1,12 @@
 import { t, l, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
-import { controls, getControl } from '../devices/mikro-mk3/controls.js';
 import { hex, reportHex, summarizeCapture, normalizeImport } from './analysis.js';
-import { renderHardware, refreshHardwareLabels } from '../devices/mikro-mk3/hardware-view.js';
 import { CaptureSession, MAX_REPORTS } from './capture-session.js';
 
-export function mountTesting(runtime, toast) {
+/** Device UI is injected; capture and analysis only subscribe to Runtime. */
+export function mountTesting(runtime, toast, { controls, getControl, renderHardware, refreshHardwareLabels, initialControlId }) {
   const $ = id => document.getElementById(id);
   const model = new CaptureSession();
-  let selected = 'PAD_1';
+  let selected = initialControlId;
   let displayedCapture = null;
   let device = runtime.snapshot.device;
   function escapeHtml(value) {

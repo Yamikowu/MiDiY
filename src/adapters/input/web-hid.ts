@@ -1,5 +1,5 @@
 import { AppError } from '../../runtime/issues';
-import type { OutputReport } from '@midiy/mikro-core';
+import type { OutputReport } from '../../runtime/contracts';
 import type { RawReport, DeviceInfo, InputSelection, ControllerInput } from '../../runtime/contracts';
 
 export function outputReports(collections: readonly HIDCollectionInfo[]): HIDReportInfo[] {

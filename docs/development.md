@@ -18,13 +18,37 @@
 
 ## 修改邊界
 
-先看[架構](architecture.md)。控制器差異進 Driver／裝置描述，瀏覽器 API 留 Adapter，草稿與儲存留 Mapping UI；研究工具訂閱 Runtime 原始資料。
+先看[架構](architecture.md)。控制器差異進 Driver／裝置描述，瀏覽器 API 留 Adapter，草稿留裝置的 EditorSession，儲存由 Mapping 協調器與 Library 執行；研究工具訂閱 Runtime 原始資料。
 
 新增裝置時先收集識別／連線模式、原始封包、來源版本、重現步驟與協定證據，再建立裝置實作與解碼向量，更新輸入支援表。候選位元不可直接列為已確認。第二種裝置尚未實作，本輪不假定所有控制器都符合 Mikro 的事件模型。
 
-修改既有格式時保留匯入相容性、儲存鍵與輸出命名；套件 exports 不隨內部搬移改名。現有 Profile／本機清單的格式與遷移細節集中於[Mikro Profile](devices/mikro-mk3/profile.md)。原生盒子的 USB Host、供電與 MIDI 封裝仍須獨立實作。
+修改既有格式時保留匯入相容性、儲存鍵與輸出命名；套件 exports 不隨內部搬移改名。現有 Profile／本機清單的格式與支援範圍集中於[Mikro Profile](devices/mikro-mk3/profile.md)。原生盒子的 USB Host、供電與 MIDI 封裝仍須獨立實作。
 
 裝置協定、來源版本與移植限制維護在各裝置文件；目前可參考[Mikro 裝置入口](devices/mikro-mk3/README.md)。第三方程式需保留[授權](../THIRD_PARTY_NOTICES.md)，外部參考 checkout 不是本專案建置依賴。
+
+## 功能修改導覽
+
+先從 `src/devices/mikro-mk3/index.ts` 看裝置組裝，再只讀此次功能的模組；不用先讀完整 UI。下表中的 Mapping 檔案均位於該裝置的 `mapping/`。
+
+| 要修改的功能 | 優先閱讀 |
+| --- | --- |
+| Pad Hit／Press／燈色欄位 | `bindings/pad-editor.ts`、`bindings/button-editor.ts`（共用離散動作）、`bindings/binding-draft.ts` |
+| Button Note／CC／Action on | `bindings/button-editor.ts`、`bindings/binding-fields.ts`；共用呈現由 `binding-editor.ts` 協調 |
+| Encoder CC | `bindings/encoder-editor.ts` |
+| Strip Position／Touch／燈光 | `bindings/strip-editor.ts` |
+| 草稿、複選、複製貼上、歷史 | `editor-session.ts`、`editor-model.ts`；套用／儲存副作用在 `translator-ui.ts` |
+| Profile／Mode 管理與觸發指派 | `profile-mode-panel.ts`、`profile-library.ts` |
+| 硬體圖、框選與實體操作選取 | `hardware-workspace.ts`、裝置 `ui/hardware-view.js` |
+| 燈光預覽／立即回饋設定 | `feedback-preview.ts`／`feedback-settings.ts` |
+| 演奏轉譯、清音、連線及 LED 關閉 | 裝置 `runtime.ts`、`driver.ts`，必要時讀 `mikro-core` 對應演算法 |
+| 原始資料研究 | 共用 `src/research/`；裝置指引由 Mikro `research.ts` 提供 |
+| 視覺樣式 | `src/styles/index.css` 載入順序及對應功能檔；硬體表面在裝置 `ui/hardware.css` |
+
+第二裝置加入前，不把 Mikro 的 ControlId、Pad、Strip 或 Profile 包成假通用介面。先以實機報告確認能力，再決定共用 Runtime／映射契約；有第二個相同需求才評估提取共用功能。保留 `mikro-core` exports，Profile 只接受目前 v2，禁止增加舊格式讀取或遷移。
+
+## 瀏覽器回歸
+
+執行 `npm start`，開啟 `/test/browser/workspace-preview.html`，同時執行 1440px 與 390px 的真實 UI／Runtime 回歸，I/O 與儲存使用測試替身。結果顯示在 `preview-results`；單一寬度可開 `/test/browser/workspace-layout.html`。包含 Profile／Mode、Pad／Strip、草稿、語系、Research 與版面檢查，不會讀寫使用者 Profile，也不能證明實體 LED 或 DAW 已收到資料。
 
 ## Capture Session：目前 HID 擷取格式
 
@@ -48,6 +72,6 @@ JSON 匯出名稱維持 `midiy-session-<timestamp>.json`；候選 CSV 維持 `mi
 
 ## Note 顯示偏好回歸
 
-`src/mapping/note-format.ts` 負責純換算與獨立偏好儲存，`note-input.ts` 負責網頁控制項；Runtime、Driver、Profile 格式不接收顯示偏好。數字欄位保留為編輯器的標準值，偏好刷新不派送表單事件。
+`src/shared/notes/note-format.ts` 負責純換算與獨立偏好儲存，`note-input.ts` 負責網頁控制項；Runtime、Driver、Profile 格式不接收顯示偏好。數字欄位保留為編輯器的標準值，偏好刷新不派送表單事件。
 
 執行 `npm test` 驗證全部音符的換算、偏好儲存及已連線 Runtime 的無副作用切換。執行 `npm start` 後開啟 `/test/browser/note-preferences.html`，可用實際編輯器與 Runtime 搭配假 Adapter 做瀏覽器回歸。該頁使用記憶體儲存，不讀寫使用者 Profile；「Simulate connection + MIDI + LED」啟動模擬裝置，「Check state」顯示設定、草稿及發送／事件計數。此工具不代表實機驗證。

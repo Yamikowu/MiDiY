@@ -1,10 +1,14 @@
-import { toIssue, type Issue } from './issues';
 import {
-  MappingEngine, BUTTON_IDS, createDefaultProfile, parseProfile, type Profile, type InputEvent,
-  type MidiMessage, type OutputReport, type PadVelocityCurve
+  BUTTON_IDS, createDefaultProfile,
+  MappingEngine,
+  parseProfile,
+  type InputEvent,
+  type MidiMessage, type OutputReport, type PadVelocityCurve,
+  type Profile
 } from '@midiy/mikro-core';
-import type { ControllerInput, MidiOutput, DeviceInfo, MidiStatus, RawReport } from './contracts';
-import type { MikroDriver, PerformanceState } from '../devices/mikro-mk3/driver';
+import type { ControllerInput, DeviceInfo, MidiOutput, MidiStatus, RawReport } from '../../runtime/contracts';
+import { toIssue, type Issue } from '../../runtime/issues';
+import type { MikroDriver, PerformanceState } from './driver';
 
 export interface RuntimeSnapshot {
   device: DeviceInfo | null; midi: MidiStatus; activeModeId: string;

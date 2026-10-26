@@ -1,12 +1,8 @@
-import { NotePreferences } from './mapping/note-format';
+import { mountMikro } from './devices/mikro-mk3';
+import { mikroDefinition } from './devices/mikro-mk3/definition';
 import { t, onLocaleChange, formatError, initializeLocale, mountLanguageSwitcher } from './i18n/index';
-import { TranslatorRuntime } from './runtime/translator-runtime';
-import { MikroDriver } from './devices/mikro-mk3/driver';
 import { WebHidAdapter } from './adapters/input/web-hid';
 import { WebMidiAdapter } from './adapters/output/web-midi';
-import { ProfileLibrary } from './mapping/profile-library';
-import { TranslatorUI } from './mapping/translator-ui';
-import { mountTesting } from './research/testing-ui.js';
 import { mountPages } from './shared/pages';
 
 const $ = id => document.getElementById(id);
@@ -20,11 +16,10 @@ const browserStorage = (() => {
 })();
 initializeLocale(browserStorage, navigator.languages);
 mountLanguageSwitcher();
-const library = new ProfileLibrary(browserStorage);
-const driver = new MikroDriver();
-const runtime = new TranslatorRuntime(new WebHidAdapter(driver.definition.input), new WebMidiAdapter(), driver, library.current);
-new TranslatorUI(runtime, library, { toast, notePreferences: new NotePreferences(browserStorage) });
-mountTesting(runtime, toast);
+const { runtime } = mountMikro({
+  input: new WebHidAdapter(mikroDefinition.input), output: new WebMidiAdapter(),
+  storage: browserStorage, toast,
+});
 mountPages();
 runtime.subscribe(event => {
   if (event.type === 'error') toast(formatError(event));
@@ -46,7 +41,7 @@ document.addEventListener('keydown', event => {
 
 function renderConnection(state) {
   const device = state.device;
-  $('device-status').textContent = device ? t('connected', {p0: device.productName || driver.definition.name}) : t('disconnected');
+  $('device-status').textContent = device ? t('connected', {p0: device.productName || mikroDefinition.name}) : t('disconnected');
   $('device-status').classList.toggle('connected', Boolean(device));
   $('connect').disabled = Boolean(device); $('disconnect').disabled = !device;
 }

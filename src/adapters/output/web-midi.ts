@@ -1,4 +1,4 @@
-import type { MidiMessage } from '@midiy/mikro-core';
+import type { MidiMessage } from '../../runtime/contracts';
 import type { MidiOutput, MidiStatus } from '../../runtime/contracts';
 
 export class WebMidiAdapter implements MidiOutput {

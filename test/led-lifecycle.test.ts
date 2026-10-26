@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BUTTON_IDS, createDefaultProfile } from '@midiy/mikro-core';
-import { TranslatorUI } from '../src/mapping/translator-ui.ts';
-import { ProfileLibrary } from '../src/mapping/profile-library.ts';
-import { TranslatorRuntime } from '../src/runtime/translator-runtime.ts';
+import { TranslatorUI } from '../src/devices/mikro-mk3/mapping/translator-ui.ts';
+import { ProfileLibrary } from '../src/devices/mikro-mk3/mapping/profile-library.ts';
+import { TranslatorRuntime } from '../src/devices/mikro-mk3/runtime.ts';
 import { MikroDriver } from '../src/devices/mikro-mk3/driver.ts';
 import { WebHidAdapter } from '../src/adapters/input/web-hid.ts';
 import { fixture, FakeMidi, tick } from './runtime-fixture.ts';
@@ -47,16 +47,16 @@ test('physical buttons, Pad hits, Encoder rotation and Strip touch select Mappin
   }
   class SelectionUI extends PhysicalSelectionUI {
     selectedFromHardware: string[] = [];
-    selectControl(id: string) { this.selectedFromHardware.push(id); this.selected = id; return Promise.resolve(); }
+    selectControl(id: string) { this.selectedFromHardware.push(id); this.session.selected = id; return Promise.resolve(); }
     addEvent() {}
   }
   const { runtime, input, midi } = fixture();
   const ui = new SelectionUI(runtime, new ProfileLibrary({ getItem: () => null, setItem() {} }), { toast() {} });
   ui.handleEvent({ kind: 'button', controlId: 'PLAY', pressed: true });
   ui.handleEvent({ kind: 'pad', controlId: 'PAD_2', padIndex: 13, event: 'note-on', raw: 1000, velocity: 60 });
-  assert.equal(ui.followHardwareSelection, false);
+  assert.equal(ui.session.followHardwareSelection, false);
   assert.deepEqual(ui.selectedFromHardware, []);
-  ui.followHardwareSelection = true;
+  ui.session.followHardwareSelection = true;
   ui.handleEvent({ kind: 'button', controlId: 'PLAY', pressed: true });
   ui.handleEvent({ kind: 'button', controlId: 'PLAY', pressed: false });
   assert.deepEqual(ui.selectedFromHardware, ['PLAY']);
@@ -84,16 +84,16 @@ test('physical buttons, Pad hits, Encoder rotation and Strip touch select Mappin
   ui.handleEvent({ ...pad, controlId: 'PAD_3', event: 'note-on' });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(ui.selectedFromHardware.at(-1), 'PAD_3');
-  ui.selection = new Set(['PAD_2', 'PAD_3']);
+  ui.session.selection = new Set(['PAD_2', 'PAD_3']);
   ui.handleEvent({ ...pad, controlId: 'PAD_4', event: 'note-on' });
   assert.equal(ui.selectedFromHardware.at(-1), 'PAD_3');
-  ui.selection = new Set(['PAD_3']);
+  ui.session.selection = new Set(['PAD_3']);
   mappingPage.hidden = true;
   ui.handleEvent({ kind: 'button', controlId: 'STOP', pressed: true });
   ui.handleEvent({ kind: 'encoder', controlId: 'ENCODER_ROTATE', raw: 10, delta: 1 });
   ui.handleEvent({ ...pad, controlId: 'PAD_4', event: 'note-on' });
   assert.deepEqual(ui.selectedFromHardware, ['PLAY', 'ENCODER_ROTATE', 'SMART_STRIP', 'PAD_2', 'PAD_3']);
-  mappingPage.hidden = false; ui.followHardwareSelection = false;
+  mappingPage.hidden = false; ui.session.followHardwareSelection = false;
   await runtime.connect(); await runtime.selectOutput('a');
   input.report(2, [12, 24, 0]); input.report(2, [12, 48, 0]);
   assert.deepEqual(midi.sent.map(entry => entry.message), [[0x90, 36, 64], [0x80, 36, 0]]);

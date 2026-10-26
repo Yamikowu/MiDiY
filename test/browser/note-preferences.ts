@@ -2,9 +2,9 @@
 import { BUTTON_IDS, padNumberToIndex } from '@midiy/mikro-core';
 import page from '../../index.html?raw';
 import { fixture } from '../runtime-fixture';
-import { TranslatorUI } from '../../src/mapping/translator-ui';
-import { ProfileLibrary } from '../../src/mapping/profile-library';
-import { NotePreferences } from '../../src/mapping/note-format';
+import { TranslatorUI } from '../../src/devices/mikro-mk3/mapping/translator-ui';
+import { ProfileLibrary } from '../../src/devices/mikro-mk3/mapping/profile-library';
+import { NotePreferences } from '../../src/shared/notes/note-format';
 import { initializeLocale, mountLanguageSwitcher } from '../../src/i18n/index';
 import { mountPages } from '../../src/shared/pages';
 document.documentElement.innerHTML = page.replace(/<script[\s\S]*?<\/script>/g, '').replaceAll('href="./', 'href="/');
@@ -27,7 +27,7 @@ const check = () => {
   stripLights:[...runtime.snapshot.lightReport.data.slice(55)], sameRuntime:runtime===initialRuntime, device:runtime.snapshot.device, midi:runtime.snapshot.midi,
   ledEnabled:runtime.snapshot.ledEnabled, midiSends:midi.sent.length, ledSends:input.sent.length, stateEvents,
   profile:library.current, storage:[...values],
-  dirty:(ui as any).bindingDirty, batch:(ui as any).batchChanges,
+  dirty:(ui as any).session.bindingDirty, batch:(ui as any).session.batchChanges,
  },null,2);
 };
 document.getElementById('test-connect')!.onclick = async () => {await runtime.connect(); await runtime.enableMidi(); await runtime.selectOutput('a'); runtime.setLedEnabled(true); check();};

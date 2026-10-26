@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDefaultProfile } from '@midiy/mikro-core';
-import { ProfileLibrary } from '../src/mapping/profile-library';
+import { ProfileLibrary } from '../src/devices/mikro-mk3/mapping/profile-library';
 
 const storage = () => {
   const data = new Map<string, string>();

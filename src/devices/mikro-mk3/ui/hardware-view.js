@@ -1,5 +1,5 @@
-import { t, attribute, labelMarkup, translateLabel } from '../../i18n/index';
-import { getControl } from './controls.js';
+import { t, attribute, labelMarkup, translateLabel } from '../../../i18n/index';
+import { getControl } from '../controls.js';
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // One physical layout, independently mounted in Testing and Mapping.

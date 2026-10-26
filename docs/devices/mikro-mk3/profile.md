@@ -4,7 +4,7 @@
 
 Profile 包含 name、initialModeId、modes、必填 padVelocityCurve（新建預設 linear）。模式使用穩定控制項 ID，含 bindings、16 顆 Pad 燈光、可選 pressureBindings 與 Strip 回饋。Channel 為 1–16，數值範圍依各 binding 驗證；不含瀏覽器埠 ID 或原生裝置物件。匯入一律經 parseProfile，取得獨立副本。Pad Hit 不接受 actionOn；一般按鍵 Note 輸出固定為 127。
 
-本機只使用 `midiy-profile-library-v2` 保存多份設定與目前選取項目，不另寫單份設定鏡像。舊 `mpa-*` 與 v1 Profile／清單不再讀取或轉換；原有儲存資料不刪除。沒有 v2 清單時使用預設設定，清單損壞時顯示警告並使用預設設定。清單 metadata 與可攜 Profile JSON 分開，實作位於 `src/mapping/profile-library.ts`。完整 API 見[套件說明](../../../packages/mikro-core/README.md)。
+本機只使用 `midiy-profile-library-v2` 保存多份設定與目前選取項目，不另寫單份設定鏡像。舊 `mpa-*` 與 v1 Profile／清單不再讀取或轉換；原有儲存資料不刪除。沒有 v2 清單時使用預設設定，清單損壞時顯示警告並使用預設設定。清單 metadata 與可攜 Profile JSON 分開，實作位於 `src/devices/mikro-mk3/mapping/profile-library.ts`。完整 API 見[套件說明](../../../packages/mikro-core/README.md)。
 
 草稿不寫入執行設定；套用才儲存並更新 Runtime。共用亮度與力度選單維持立即儲存。新版多裝置 Profile 與盒子路由契約屬未來規劃。
 

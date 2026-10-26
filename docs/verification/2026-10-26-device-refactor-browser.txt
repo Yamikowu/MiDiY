@@ -1,0 +1,174 @@
+1440px PASS 87 workspace checks
+PASS Control inspector starts selected
+PASS Inspector tabs show one panel
+PASS Mode inspector shows mode assignment palette
+PASS Mode preview uses mode names instead of MIDI assignments
+PASS Click assigned Pad browses its Mode without switching playback
+PASS Mode canvas highlights the editor Mode independently of playback
+PASS Mode browsing preserves held note and sends no HID or MIDI
+PASS Unassigned canvas control preserves edited mode and reports unassigned
+PASS Mode dropdown changes editor only without saving or I/O
+PASS Mapping editor Mode dropdown also preserves actual playing mode and I/O
+PASS Entering Mode inspector resolves the already-selected assigned control without I/O
+PASS Profile rename keeps input width
+PASS Profile Escape cancels without mutation
+PASS Mode rename keeps input width
+PASS Mode Escape cancels without mutation
+PASS Blank profile has one empty mode
+PASS Blank defaults have no selector pad and linear velocity
+PASS Cancel rename retains newly created profile
+PASS Profile Enter saves name
+PASS Add mode creates empty mappings
+PASS Mode Enter saves name
+PASS Startup mode changes exclusively and remains selected
+PASS Trigger dropdown assigns Pad
+PASS Trigger dropdown replaces Pad with button
+PASS Monochrome button trigger does not expose Pad color
+PASS Other mode sees occupied trigger disabled
+PASS Assigned button selects its editing Mode without playback changes or I/O
+PASS Mode selector previews assigned button dim
+PASS Selector plus button switches actual mode and highlights it
+PASS Hardware switching does not replace Mode inspector editing target
+PASS Clear removes assigned mode trigger
+PASS Reserved shortcut key is omitted from trigger options
+PASS Duplicate mode clears unique selector pad
+PASS Delete mode confirms and removes test mode
+PASS Duplicate profile preserves all modes
+PASS Delete profile confirms and removes test profile
+PASS Inspector switches preserve unapplied mapping draft
+PASS Rename does not apply mapping draft
+PASS Mode rename preserves mapping draft
+PASS Existing mapping Apply still saves
+PASS Note display preferences sit under canvas for Note mapping
+PASS CC mapping hides unrelated note display preferences
+PASS Poly Pressure mapping shows note display preferences
+PASS Subtab switches preserve form nodes and do not save or send I/O
+PASS Hit and Press keep independent drafts with shared pad light controls
+PASS Editing both tabs remains unapplied
+PASS Validation reveals an invalid field in the inactive Press tab
+PASS Apply saves Hit, Press and unchanged-format light settings together
+PASS Pad subtabs support keyboard navigation
+PASS Multi-pad edit uses Hit and Press subtabs
+PASS Multi-pad Press changes apply from the Hit tab
+PASS Strip shows Position and Touch instead of Hit and Press
+PASS Strip tabs preserve Position and Touch drafts with shared lights
+PASS Validation reveals an invalid inactive Touch field
+PASS Apply saves Position, Touch and strip lights together
+PASS Ordinary buttons do not display Pad or Strip subtabs
+PASS Copy/paste shortcuts stage a draft without storage or physical output
+PASS Paste applies the copied binding only after Apply
+PASS Undo shortcut restores the previous saved profile
+PASS Redo shortcut restores the applied paste
+PASS Note octave and input preferences preserve the canonical field and unapplied draft
+PASS Note preferences do not save a Profile or send physical I/O
+PASS Toolbar icon has accessible label: midi-profile-edit
+PASS Toolbar icon has accessible label: midi-profile-duplicate
+PASS Toolbar icon has accessible label: midi-mode-edit
+PASS Toolbar icon has accessible label: midi-add-mode
+PASS Mode and selector dropdowns align exactly
+PASS Profile velocity persists immediately
+PASS Mode shared brightness persists immediately
+PASS Locale changes preserve rename and translate inspector
+PASS Testing keeps global MIDI controls visible
+PASS Testing capture is ready after simulated connection
+PASS Testing capture state changes
+PASS Testing records and analyzes simulated input
+PASS Testing locale change preserves notes and captures
+PASS Testing has no page overflow
+PASS Navigation remains at top while scrolling Testing
+PASS LED and MIDI share the bottom status bar
+PASS Saved v2 profile library reloads
+PASS Page has no horizontal overflow
+PASS Navigation and status content share width and alignment
+PASS MIDI sits left and hardware sits right
+PASS Status buttons and select share height
+PASS Navigation remains at top while scrolling Mapping
+PASS Status bar spans viewport bottom
+PASS Content reserves space for status bar
+PASS Desktop inspector stays beside canvas
+SIMULATED I/O: 2 MIDI messages, 30 HID writes. No physical device used.
+390px PASS 83 workspace checks
+PASS Control inspector starts selected
+PASS Inspector tabs show one panel
+PASS Mode inspector shows mode assignment palette
+PASS Mode preview uses mode names instead of MIDI assignments
+PASS Click assigned Pad browses its Mode without switching playback
+PASS Mode canvas highlights the editor Mode independently of playback
+PASS Mode browsing preserves held note and sends no HID or MIDI
+PASS Unassigned canvas control preserves edited mode and reports unassigned
+PASS Mode dropdown changes editor only without saving or I/O
+PASS Mapping editor Mode dropdown also preserves actual playing mode and I/O
+PASS Entering Mode inspector resolves the already-selected assigned control without I/O
+PASS Profile rename keeps input width
+PASS Profile Escape cancels without mutation
+PASS Mode rename keeps input width
+PASS Mode Escape cancels without mutation
+PASS Blank profile has one empty mode
+PASS Blank defaults have no selector pad and linear velocity
+PASS Cancel rename retains newly created profile
+PASS Profile Enter saves name
+PASS Add mode creates empty mappings
+PASS Mode Enter saves name
+PASS Startup mode changes exclusively and remains selected
+PASS Trigger dropdown assigns Pad
+PASS Trigger dropdown replaces Pad with button
+PASS Monochrome button trigger does not expose Pad color
+PASS Other mode sees occupied trigger disabled
+PASS Assigned button selects its editing Mode without playback changes or I/O
+PASS Mode selector previews assigned button dim
+PASS Selector plus button switches actual mode and highlights it
+PASS Hardware switching does not replace Mode inspector editing target
+PASS Clear removes assigned mode trigger
+PASS Reserved shortcut key is omitted from trigger options
+PASS Duplicate mode clears unique selector pad
+PASS Delete mode confirms and removes test mode
+PASS Duplicate profile preserves all modes
+PASS Delete profile confirms and removes test profile
+PASS Inspector switches preserve unapplied mapping draft
+PASS Rename does not apply mapping draft
+PASS Mode rename preserves mapping draft
+PASS Existing mapping Apply still saves
+PASS Note display preferences sit under canvas for Note mapping
+PASS CC mapping hides unrelated note display preferences
+PASS Poly Pressure mapping shows note display preferences
+PASS Subtab switches preserve form nodes and do not save or send I/O
+PASS Hit and Press keep independent drafts with shared pad light controls
+PASS Editing both tabs remains unapplied
+PASS Validation reveals an invalid field in the inactive Press tab
+PASS Apply saves Hit, Press and unchanged-format light settings together
+PASS Pad subtabs support keyboard navigation
+PASS Multi-pad edit uses Hit and Press subtabs
+PASS Multi-pad Press changes apply from the Hit tab
+PASS Strip shows Position and Touch instead of Hit and Press
+PASS Strip tabs preserve Position and Touch drafts with shared lights
+PASS Validation reveals an invalid inactive Touch field
+PASS Apply saves Position, Touch and strip lights together
+PASS Ordinary buttons do not display Pad or Strip subtabs
+PASS Copy/paste shortcuts stage a draft without storage or physical output
+PASS Paste applies the copied binding only after Apply
+PASS Undo shortcut restores the previous saved profile
+PASS Redo shortcut restores the applied paste
+PASS Note octave and input preferences preserve the canonical field and unapplied draft
+PASS Note preferences do not save a Profile or send physical I/O
+PASS Toolbar icon has accessible label: midi-profile-edit
+PASS Toolbar icon has accessible label: midi-profile-duplicate
+PASS Toolbar icon has accessible label: midi-mode-edit
+PASS Toolbar icon has accessible label: midi-add-mode
+PASS Profile velocity persists immediately
+PASS Mode shared brightness persists immediately
+PASS Locale changes preserve rename and translate inspector
+PASS Testing keeps global MIDI controls visible
+PASS Testing capture is ready after simulated connection
+PASS Testing capture state changes
+PASS Testing records and analyzes simulated input
+PASS Testing locale change preserves notes and captures
+PASS Testing has no page overflow
+PASS Navigation remains at top while scrolling Testing
+PASS LED and MIDI share the bottom status bar
+PASS Saved v2 profile library reloads
+PASS Page has no horizontal overflow
+PASS Navigation and status content share width and alignment
+PASS Navigation remains at top while scrolling Mapping
+PASS Status bar spans viewport bottom
+PASS Content reserves space for status bar
+SIMULATED I/O: 2 MIDI messages, 30 HID writes. No physical device used.

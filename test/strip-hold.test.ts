@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDefaultProfile, parseProfile} from '@midiy/mikro-core';
 import {fixture, tick} from './runtime-fixture.ts';
-import {ProfileLibrary} from '../src/mapping/profile-library.ts';
+import {ProfileLibrary} from '../src/devices/mikro-mk3/mapping/profile-library.ts';
 const strip = (raw:number) => {const data=Array(13).fill(0);data[9]=raw;return data;};
 const lights = (runtime: ReturnType<typeof fixture>['runtime']) => [...runtime.snapshot.lightReport.data.slice(55)];
 const profile = (mode:'dot'|'bar'|'pan'='dot') => {

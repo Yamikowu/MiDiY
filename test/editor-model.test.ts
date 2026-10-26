@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDefaultProfile, type ControlId } from '@midiy/mikro-core';
-import { commonActions, commonFields, controlsInRect, selectControls, patchControls, copyControls, pasteControls, EditHistory } from '../src/mapping/editor-model.ts';
+import { commonActions, commonFields, controlsInRect, selectControls, patchControls, copyControls, pasteControls, EditHistory } from '../src/devices/mikro-mk3/mapping/editor-model.ts';
 
 const setup = () => { const profile = createDefaultProfile(); return { profile, modeId: profile.initialModeId }; };
 test('selection toggles with Shift; reversed marquee intersects real control bounds', () => {
@@ -98,7 +98,7 @@ test('history treats batch as one step, supports redo branching, isolation and a
 });
 
 test('shortcuts resolve both platforms and preserve native text undo/copy/paste', async () => {
-  const { mappingShortcut } = await import('../src/mapping/editor-model.ts');
+  const { mappingShortcut } = await import('../src/devices/mikro-mk3/mapping/editor-model.ts');
   const event = { key: 'z', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, repeat: false, isComposing: false };
   assert.equal(mappingShortcut(event, false), 'undo');
   assert.equal(mappingShortcut({ ...event, ctrlKey: false, metaKey: true, shiftKey: true }, false), 'redo');

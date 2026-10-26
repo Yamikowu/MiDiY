@@ -1,0 +1,429 @@
+/* mapping: rules owned here; loaded through styles/index.css. */
+.padmode-grid {
+  display: grid;
+  grid-template-columns: var(--mode-key-width) repeat(4, minmax(0, 1fr));
+  gap: var(--pad-column-gap);
+  min-height: 0;
+}.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(8, 1fr);
+  gap: var(--mode-gap);
+  min-height: 0;
+}.config-panel {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}.config-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+  align-content: start;
+  min-width: 0;
+}.config-row+.config-row {
+  padding-left: 20px;
+}.translator-panel label:not(.switch):not(.file-button) {
+  display: grid;
+  color: var(--muted);
+}.translator-panel select, .translator-panel input:not([type=checkbox]):not([type=file]) {
+  width: 100%;
+}.config-picker {
+  min-width: 0;
+}.config-picker-heading {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}.config-actions, .profile-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}.profile-file-actions, .default-switch {
+  justify-self: end;
+}.default-switch {
+  white-space: nowrap;
+  min-height: 38px;
+}.save-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--quiet);
+}.config-panel [hidden] {
+  display: none !important;
+}.midi-heading-controls {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}.midi-heading-controls .output-picker {
+  display: grid;
+  gap: 8px;
+  width: 235px;
+  color: var(--muted);
+  font-size: 10px;
+}.midi-heading-controls .output-picker select {
+  width: 100%;
+}.midi-heading-controls #midi-panic {
+  margin: 0;
+}.mapping-editor {
+  position: sticky;
+}.draft-state {
+  font-size: 9px;
+  color: var(--quiet);
+}.mapping-editor>h2 {
+  margin-top: 19px;
+  font-size: 29px;
+  font-weight: 550;
+  letter-spacing: -.04em;
+}.binding-summary {
+  white-space: pre-line;
+  line-height: 1.7;
+  color: var(--muted);
+  font: 11px var(--mono);
+}.binding-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 12px;
+  margin-top: 16px;
+}.binding-fields:empty {
+  display: none;
+}.binding-fields>.fixed-velocity-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}.binding-fields .editor-section-label {
+  margin-top: 8px;
+  margin-bottom: -2px;
+}#midi-apply {
+  margin-top: 24px;
+}#midi-binding-help {
+  font-size: 10px;
+  color: var(--quiet);
+}.device-settings {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 0 24px;
+}.device-settings>.device-options { min-width: 0; }.device-options summary>#midi-led-summary {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--quiet);
+}.led-settings {
+  display: grid;
+  margin-bottom: 16px;
+}.brightness-pair {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+}.brightness-pair legend {
+  line-height: 14px;
+  color: var(--text);
+}.brightness-pair label { min-width: 0; }@media (max-width: 760px) {
+  .device-settings { grid-template-columns: minmax(0, 1fr); }
+}@media (max-width: 540px) {
+  .led-settings { grid-template-columns: minmax(0, 1fr); }
+  .brightness-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}.mapping-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 0;
+  color: var(--quiet);
+}#midi-status {
+  color: #b5bda6;
+}#midi-events {
+  height: 170px;
+  overflow: auto;
+  margin: 18px 0 0;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--field);
+  color: #b6b9ad;
+  font: 10px/1.8 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}@media (max-width: 1060px) {
+  .config-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .config-row {
+    grid-template-columns: minmax(180px, 1fr) auto auto;
+  }
+
+  .config-row+.config-row {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 18px;
+  }
+}@media (max-width: 1120px) {
+  .mapping-editor {
+    position: static;
+  }
+
+  .mapping-workspace .mapping-editor {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 28px;
+  }
+
+  .mapping-editor>h2, .binding-summary {
+    grid-column: 1;
+  }
+
+  #midi-binding-form {
+    grid-column: 2;
+    grid-row: 1 / 5;
+  }
+
+  #midi-binding-form>.editor-section-label {
+    margin-top: 0;
+  }
+
+  #midi-binding-help {
+    grid-column: 1;
+  }
+}@media (max-width: 680px) {
+  .config-panel {
+    padding: 16px;
+  }
+
+  .config-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .config-actions {
+    gap: 6px;
+  }
+
+  .config-actions button {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .profile-file-actions, .default-switch {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .midi-heading-controls {
+    flex-wrap: wrap;
+  }
+
+  .midi-heading-controls .output-picker {
+    flex: 1;
+    min-width: 170px;
+    width: auto;
+  }
+
+  .mapping-workspace .mapping-editor {
+    display: block;
+  }
+
+  #midi-binding-form>.editor-section-label {
+    margin-top: 22px;
+  }
+
+  .device-options summary>#midi-led-summary {
+    font-size: 8px;
+  }
+
+  .mapping-status {
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 9px;
+  }
+}.mapping-controller-heading {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+}.mapping-controller-heading .mapping-legend {
+  align-self: end;
+  margin: 0 0 3px;
+  white-space: nowrap;
+}.mapping-controller-heading>.section-note {
+  margin-bottom: 3px;
+  justify-self: end;
+  text-align: right;
+}.mapping-footer-row {
+  display: flex;
+  align-items: center;
+}.mapping-footer-row .map-hint {
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}.mapping-edit-actions {
+  display: flex;
+  align-items: center;
+}.mapping-edit-actions button {
+  padding: 7px 10px;
+  min-height: 30px;
+  font-size: 10px;
+}.mapping-edit-actions span {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+  margin-left: auto;
+}#midi-hardware {
+  position: relative;
+  user-select: none;
+  touch-action: pan-y;
+}.mapping-marquee {
+  position: absolute;
+  border: 1px solid var(--accent);
+  background: #b9c98725;
+  pointer-events: none;
+  z-index: 10;
+}@media (max-width: 600px) {
+  .mapping-footer-row {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+
+  .mapping-footer-row .map-hint {
+    flex-basis: 100%;
+    text-align: center;
+  }
+}.note-preferences {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  align-self: start;
+  align-items: start;
+}.note-preferences label {
+  min-width: 0;
+}.note-input {
+  min-width: 0;
+}.note-input [hidden] {
+  display: none !important;
+}.binding-fields {
+  align-items: start;
+}@media (min-width:681px) and (max-width:1120px) {
+  .mapping-workspace .mapping-editor {
+    align-items: start;
+    grid-template-rows: repeat(4, max-content) 1fr;
+  }
+
+  .note-preferences {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  #midi-binding-form {
+    grid-row: 1 / 6;
+  }
+
+  #midi-binding-help {
+    grid-row: 5;
+  }
+}.mode-config-row {
+  grid-template-columns: minmax(140px, 1fr) 84px 96px 100px auto auto;
+  justify-content: start;
+}.mode-config-row > label { min-width: 0; grid-template-columns: minmax(0, 1fr); }.mode-config-row select { min-width: 0; padding-inline: 8px; }.mode-selector-setting { min-width: 0; }.mode-selector-setting .config-picker-heading { width: max-content; }.profile-config-row { grid-template-columns: minmax(100px, 1fr) auto auto; }.config-panel .config-actions button { padding-inline: 8px; }.config-panel .profile-file-actions { gap: 4px; }.config-panel .profile-file-actions .text-button { padding-inline: 4px; }.mode-shortcut { color: var(--quiet); font-size: 9px; font-weight: 400; }@media (max-width: 1060px) {
+  .profile-config-row { grid-template-columns: minmax(140px, 220px) auto auto; justify-content: start; }
+}@media (max-width: 680px) {
+  .profile-config-row { grid-template-columns: minmax(0, 1fr) auto; }
+}#midi-mode-color { border-left: 6px solid var(--mode-color); }#midi-mode-color:disabled { opacity: .45; cursor: not-allowed; }@media (max-width: 900px) {
+  .mode-config-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}@media (max-width: 540px) {
+  .mode-config-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mode-config-row .default-switch { grid-column: auto; }
+  .mode-selector-setting .config-picker-heading { width: auto; flex-wrap: wrap; gap: 4px; }
+}.connection-dock .midi-heading-controls { align-items: center; gap: 12px; }.connection-dock .midi-heading-controls .output-picker { width: auto; margin: 0; white-space: nowrap; }@media (max-width:680px) {
+  .connection-dock .midi-heading-controls { flex-wrap: nowrap; gap: 8px; }
+  .connection-dock .midi-heading-controls .output-picker { min-width: 0; }
+}.config-panel { grid-template-columns: minmax(0, 1fr); gap: 12px; }.config-row.profile-config-row, .config-row.mode-config-row { align-items: end; }.config-row + .config-row { border-left: 0; border-top: 1px solid var(--line); padding: 12px 0 0; }.config-picker-heading { justify-content: space-between; }.config-actions { min-height: 38px; }.config-actions button { min-width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; }.config-actions .rename-save { color: #a2dc9d; background: #203825; border: 1px solid #56815a; }.config-actions .delete-icon { color: #f08080; }.mode-selector-setting { justify-self: end; }.default-switch { justify-self: start; }.mapping-controller-heading { grid-template-columns: minmax(0, 1fr) auto; }.mapping-controller-heading .mapping-legend { justify-self: start; }.mapping-editor { padding: 20px; top: 16px; }.inspector-tabs { padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }.inspector-tabs button { flex: 1; background: transparent; color: var(--muted); border: 1px solid transparent; }.mapping-editor [role=tabpanel][hidden] { display: none !important; }.mode-fields { display: grid; }.device-settings { display: block; }.led-settings { grid-template-columns: minmax(0, 1fr); }.brightness-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }.mapping-footer-row { flex-wrap: wrap; }.mapping-edit-actions { flex-wrap: wrap; }@media (max-width:1120px) {
+  .mapping-workspace .mapping-editor { display: block; }
+}@media (max-width:760px) {
+  .config-row.profile-config-row, .config-row.mode-config-row { grid-template-columns: minmax(0, 1fr) 152px; }
+  .profile-velocity, .mode-selector-setting { width: auto; min-width: 0; justify-self: stretch; }
+  .profile-file-actions { grid-column: 2; }
+  .default-switch { grid-column: 1; }
+  .config-picker-heading { flex-wrap: wrap; white-space: normal; }
+}@media (max-width:420px) {
+  .config-panel { padding: 12px; }
+  .config-actions { grid-row: auto; }
+}.connection-dock .midi-heading-controls { gap: 12px; }.connection-dock .midi-heading-controls { flex: 0 1 auto; margin: 0; }.connection-dock .midi-heading-controls .output-picker { display: flex; align-items: center; gap: 12px; font-size: 11px; }.connection-dock .midi-heading-controls .output-picker select { width: 220px; }.config-panel { border-radius: 8px; }.mapping-workspace {
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 0;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}.mapping-workspace > .panel { border: 0; border-radius: 0; background: transparent; padding: 24px; }.mapping-workspace > .mapping-device { min-width: 0; }.mapping-workspace > .mapping-editor {
+  position: sticky;
+  top: calc(var(--nav-height) + 16px);
+  max-height: calc(100dvh - var(--nav-height) - var(--status-height) - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #44483e transparent;
+  border-left: 1px solid var(--line);
+}.mapping-controller-heading { min-height: 28px; margin: 0 0 20px; }.mapping-controller-heading .mapping-legend { margin: 0; gap: 20px; }.mapping-controller-heading > .section-note { align-self: center; margin: 0; }.mapping-footer-row {
+  justify-content: flex-start;
+  gap: 12px;
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}.mapping-edit-actions { justify-content: flex-start; width: 100%; gap: 8px; }.mapping-footer-row .map-hint { order: 2; font-size: 10px; text-align: left; }.mapping-edit-actions button { border-radius: 4px; }.mapping-status { padding: 0 4px; margin-top: 16px; font-size: 10px; }.config-panel { background: var(--surface); margin-bottom: 20px; padding: 20px 24px; }.config-row.profile-config-row, .config-row.mode-config-row { gap: 16px; }.profile-velocity { width: 100%; }.mode-selector-setting { width: 180px; }.config-picker-heading { align-items: baseline; }.save-status { font-size: 9px; }.translator-panel label:not(.switch):not(.file-button) { font-size: 11px; gap: 7px; }.profile-file-actions { align-self: end; min-height: 38px; }.inspector-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 24px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}.inspector-tabs button { min-height: 34px; padding: 6px 8px; border-radius: 4px; font-size: 12px; }.inspector-tabs button[aria-selected=true] { border-color: #4a5041; background: #2b3026; color: #e2ebd0; }.mapping-editor [role=tabpanel] > h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: -.02em; }#midi-control-inspector > h2 { margin: 0 0 8px; }.binding-summary { margin: 0 0 16px; font-size: 11px; }.note-preferences { padding: 12px; background: #20221e; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 20px; }.mode-fields { gap: 16px; }#midi-mode-inspector > .caption { font-size: 10px; line-height: 1.7; }.device-settings { margin-top: 20px; }.led-settings { gap: 16px; }.brightness-pair { padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #1f211d; gap: 10px; }.brightness-pair legend { padding: 0 4px; font-size: 11px; }@media (max-width:1120px) {
+  .mapping-workspace { grid-template-columns: minmax(0, 1fr); }
+  .mapping-workspace > .mapping-editor {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .mapping-editor [role=tabpanel] { max-width: 680px; margin: 0 auto; }
+  .config-row.profile-config-row, .config-row.mode-config-row { grid-template-columns: minmax(160px, 1fr) 152px minmax(150px, 180px) minmax(160px, 1fr); gap: 12px; }
+}@media (max-width:900px) {
+  .connection-dock .midi-heading-controls { flex: 1 0 100%; }
+  .connection-dock .midi-heading-controls .output-picker { flex: 1; }
+  .connection-dock .midi-heading-controls .output-picker select { width: 100%; min-width: 0; }
+  .profile-velocity, .mode-selector-setting { width: 100%; justify-self: stretch; }
+  .profile-file-actions { grid-column: 2; justify-self: end; }
+  .default-switch { grid-column: 1; }
+}@media (max-width:680px) {
+  .config-panel, .mapping-workspace > .panel { padding: 16px; }
+  .mapping-controller-heading { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .mapping-controller-heading > .section-note { justify-self: start; font-size: 9px; }
+  .mapping-footer-row .map-hint { white-space: normal; }
+  .inspector-tabs { margin-bottom: 20px; }
+  .connection-dock .midi-heading-controls { gap: 8px; }
+  .connection-dock .midi-heading-controls .output-picker { gap: 8px; font-size: 10px; }
+  .mapping-status { flex-direction: column; gap: 8px; line-height: 1.6; }
+}@media (max-width:420px) {
+  .profile-file-actions, .default-switch { grid-column: auto; justify-self: start; }
+  .profile-file-actions { min-height: 30px; }
+}.mapping-edit-actions button { color: var(--text); background: #252822; border: 1px solid #3b4035; }.mapping-edit-actions button:hover:enabled { background: #30372a; }@media (min-width:1121px) {
+  .mapping-workspace { position: relative; }
+  .mapping-workspace::after { content: ''; position: absolute; top: 0; bottom: 0; right: 360px; width: 1px; background: var(--line); pointer-events: none; }
+  .mapping-workspace > .mapping-editor { border-left: 0; }
+}.mode-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }.mode-fields > label { min-width: 0; }.mapping-device > .note-preferences {
+  max-width: 640px;
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}.config-row.profile-config-row, .config-row.mode-config-row { grid-template-columns: minmax(180px, 300px) 128px minmax(150px, 180px) minmax(180px, 1fr); }.config-row label.config-picker, .config-row label.mode-selector-setting, .config-row label.profile-velocity { grid-template-rows: 16px 38px; gap: 7px; align-items: end; }.config-row .config-picker-heading { line-height: 16px; height: 16px; flex-wrap: nowrap; }.config-row select, .config-row input:not([type=checkbox]) { height: 38px; min-height: 38px; }.config-panel .config-actions { width: 128px; gap: 6px; }.config-actions button { flex: 0 0 38px; padding: 0; }.config-actions svg { pointer-events: none; }@media (max-width:900px) {
+  .config-row.profile-config-row, .config-row.mode-config-row { grid-template-columns: minmax(0, 1fr) 128px; }
+}@media (max-width:420px) {
+  .config-row.profile-config-row, .config-row.mode-config-row { grid-template-columns: minmax(0, 1fr); }
+  .mapping-device > .note-preferences { grid-template-columns: minmax(0, 1fr); }
+}.has-pad-tabs #midi-hit-heading, .has-pad-tabs #midi-pad-press > .editor-section-label:first-child { display: none; }#midi-pad-press[role=tabpanel] { margin-top: 0; }#midi-pad-light:not(:empty) { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 24px; }#midi-pad-light > .editor-section-label { margin-top: 0; }.has-strip-tabs #midi-hit-heading, .has-strip-tabs #midi-strip-touch > .editor-section-label:first-child { display: none; }#midi-strip-touch[role=tabpanel] { margin-top: 0; }.has-pad-tabs #midi-pad-press > label:first-of-type, .has-strip-tabs #midi-strip-touch > label:first-of-type { grid-column: 1 / -1; }.mode-trigger-picker { display: flex; align-items: center; gap: 6px; min-width: 0; }.mode-trigger-picker select { min-width: 0; flex: 1; }.mode-trigger-picker button { flex: 0 0 28px; padding: 0; min-height: 38px; }#midi-mode-selection-status { margin-top: 12px; }.config-picker-heading #midi-playing-mode { margin-left: auto; min-width: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Pad/Strip binding tabs are editor UI, separate from the hardware surface. */
+.pad-binding-tabs { margin: 0 0 18px; padding: 3px; }
+.pad-binding-tabs button { min-height: 32px; font-size: 11px; }

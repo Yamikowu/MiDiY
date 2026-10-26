@@ -1,4 +1,4 @@
-import { l, t, labelMarkup, translateLabel } from '../i18n/index';
+import { l, t, labelMarkup, translateLabel } from '../../i18n/index';
 import { isMidiNote, midiNote, noteName, noteParts, octavesForPitch, PITCH_NAMES,
   type NotePreferencesValue, type NotePreferences } from './note-format';
 

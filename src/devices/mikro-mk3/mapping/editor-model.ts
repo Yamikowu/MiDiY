@@ -1,4 +1,4 @@
-import { MODE_SELECTOR_BUTTONS, CONTROL_IDS, PAD_IDS, parseProfile, type Binding, type ControlId, type Profile, type PressureBinding } from '@midiy/mikro-core';
+import { CONTROL_IDS, MODE_SELECTOR_BUTTONS, PAD_IDS, parseProfile, type Binding, type ControlId, type PressureBinding, type Profile } from '@midiy/mikro-core';
 
 export const isPadControl = (id: ControlId) => PAD_IDS.includes(id as `PAD_${number}`);
 export const orderedControls = (ids: Iterable<ControlId>) => { const selected = new Set(ids); return CONTROL_IDS.filter(id => selected.has(id)); };

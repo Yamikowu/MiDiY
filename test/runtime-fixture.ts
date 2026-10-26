@@ -1,4 +1,4 @@
-import { TranslatorRuntime } from '../src/runtime/translator-runtime.ts';
+import { TranslatorRuntime } from '../src/devices/mikro-mk3/runtime.ts';
 import { MikroDriver } from '../src/devices/mikro-mk3/driver.ts';
 import type { ControllerInput, RawReport, DeviceInfo, MidiOutput } from '../src/runtime/contracts.ts';
 import { createDefaultProfile, type Profile, type MidiMessage, type OutputReport } from '@midiy/mikro-core';

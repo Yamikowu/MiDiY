@@ -1,4 +1,6 @@
-import type { OutputReport, MidiMessage } from '@midiy/mikro-core';
+/** Transport values, independent of a controller protocol or browser objects. */
+export interface OutputReport { reportId: number; data: Uint8Array }
+export type MidiMessage = number[];
 
 /** ID is separate from payload; no HIDDevice or browser event crosses this boundary. */
 export interface RawReport { reportId: number; data: Uint8Array }

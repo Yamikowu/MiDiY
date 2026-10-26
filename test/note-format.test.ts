@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {NotePreferences, NOTE_PREFERENCES_KEY, noteName, noteParts, midiNote, noteSummary, octavesForPitch} from '../src/mapping/note-format.ts';
-import {TranslatorUI} from '../src/mapping/translator-ui.ts';
-import {ProfileLibrary} from '../src/mapping/profile-library.ts';
+import {NotePreferences, NOTE_PREFERENCES_KEY, noteName, noteParts, midiNote, noteSummary, octavesForPitch} from '../src/shared/notes/note-format.ts';
+import {TranslatorUI} from '../src/devices/mikro-mk3/mapping/translator-ui.ts';
+import {ProfileLibrary} from '../src/devices/mikro-mk3/mapping/profile-library.ts';
 import {fixture, tick} from './runtime-fixture.ts';
 
 test('every MIDI note roundtrips in all three octave conventions', () => {
@@ -57,13 +57,13 @@ test('UI display preferences preserve connected Runtime, profile, drafts and bat
  const {runtime,input,midi}=fixture();await runtime.connect();await runtime.enableMidi();await runtime.selectOutput('a');runtime.setLedEnabled(true);await tick();
  const prefs=new NotePreferences();const library=new ProfileLibrary({getItem:()=>null,setItem(){}});
  const ui=new UI(runtime,library,{toast(){},notePreferences:prefs});
- ui.bindingDirty=true; ui.batchChanges={'hit.note':61};const batch=ui.batchChanges;
- ui.pendingPaste=structuredClone(library.current);const paste=ui.pendingPaste;
+ ui.session.bindingDirty=true; ui.session.batchChanges={'hit.note':61};const batch=ui.session.batchChanges;
+ ui.session.pendingPaste=structuredClone(library.current);const paste=ui.session.pendingPaste;
  const profile=JSON.stringify(library.current),snapshot=runtime.snapshot;
  const sends=[midi.sent.length,input.sent.length];let events=0;const off=runtime.subscribe(()=>events++);
  for (const middleC of [3,4,5] as const) for (const inputMode of ['name','number'] as const) prefs.update({middleC,inputMode});
  await tick();off();
  assert.equal(ui.runtime,runtime);assert.deepEqual(runtime.snapshot,snapshot);assert.equal(events,0);
  assert.deepEqual([midi.sent.length,input.sent.length],sends);assert.equal(JSON.stringify(library.current),profile);
- assert.equal(ui.bindingDirty,true);assert.equal(ui.batchChanges,batch);assert.equal(ui.pendingPaste,paste);
+ assert.equal(ui.session.bindingDirty,true);assert.equal(ui.session.batchChanges,batch);assert.equal(ui.session.pendingPaste,paste);
 });
