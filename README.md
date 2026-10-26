@@ -6,10 +6,10 @@ MiDiY 研究與逆向工程控制器，透過自訂映射輸出 MIDI，並公開
 
 ## 快速開始
 
-需要 Node.js 22.12+ 或 24，以及支援 WebHID／Web MIDI 的桌面 Chromium 瀏覽器。
+需要 Node.js 24.22.1 以上的 24.x，以及支援 WebHID／Web MIDI 的桌面 Chromium 瀏覽器。版本管理器設定固定為 24.22.1；使用 nvm 時先執行 `nvm install`、`nvm use`。
 
 ```sh
-npm install
+npm ci
 npm start
 ```
 

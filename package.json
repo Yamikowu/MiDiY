@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=24.22.1 <25" },
   "workspaces": ["packages/*"],
   "scripts": {
     "build:core": "npm run build --workspace @midiy/mikro-core",

@@ -1,6 +1,14 @@
 # 開發指南
 
-需要 Node.js 22.12+ 或 24。根目錄執行 `npm install`、`npm start`；固定使用 `http://127.0.0.1:4173`。localhost 與 127.0.0.1 的授權與本機儲存分開。
+需要 Node.js 24.22.1 以上的 24.x。`.nvmrc` 與 `.node-version` 固定為 24.22.1，`package.json` 的 `engines.node` 限制相容範圍；使用 nvm 時先執行 `nvm install`、`nvm use`。根目錄執行 `npm ci`、`npm start`；固定使用 `http://127.0.0.1:4173`。localhost 與 127.0.0.1 的授權與本機儲存分開。
+
+24.22.1 是 [2026-10-21 的官方安全修補版本](https://nodejs.org/en/blog/release/v24.22.1)。升級版本時同步更新兩份版本檔、最低版本約束與文件，並重新執行既有測試及建置。
+
+## Docker、CI 與部署
+
+截至 2026-10-26，儲存庫沒有 Dockerfile、Compose、CI workflow 或部署平台設定，無從確認外部主機的 Node.js 版本。若另有外部建置環境，應使用版本檔指定的 Node.js，執行 `npm ci`、`npm test`、`npm run build`。
+
+目前 `npm run build` 產生靜態網站 `dist/`；提供靜態檔案本身不需要 Node.js。正式網站需透過 HTTPS 提供，讓瀏覽器可使用 WebHID／Web MIDI；`npm start` 與 `npm run preview` 用於本機開發／預覽。翻譯盒部署仍屬規劃。
 
 - `npm test`：先編譯核心，再執行協定、映射、Adapter、Runtime、研究模型與相容性測試。
 - `npm run build`：核心 ESM／宣告、網站型別檢查、Vite 正式輸出。
