@@ -16,9 +16,14 @@ export class MikroDriver {
   }
   lights(mode: Mode, state: PerformanceState, profile?: Profile, selectingMode = false): OutputReport {
     const buttons = Object.fromEntries(BUTTON_IDS.slice(0, 39)
-      .filter(id => { const b = mode.bindings[id]; return id === profile?.modeSelector || b && b.type !== 'none'; })
+      .filter(id => { const b = mode.bindings[id]; return id === profile?.modeSelector || (selectingMode ? profile?.modes.some(target => target.selectorButton === id) : b && b.type !== 'none'); })
       .map(id => {
         if (id === profile?.modeSelector) return [id, { off: 'dim', on: 'bright' }];
+        if (selectingMode && profile) {
+          const target = profile.modes.find(candidate => candidate.selectorButton === id);
+          const brightness = target?.id === mode.id ? 'bright' as const : 'dim' as const;
+          return [id, { off: brightness, on: brightness }];
+        }
         const binding = mode.bindings[id]!;
         const toggle = binding.type === 'fixed-velocity' || (binding.type === 'cc' ? binding.style === 'toggle'
           : (binding.type === 'note' || binding.type === 'button-value') && binding.mode === 'toggle');

@@ -22,6 +22,6 @@ FIXED VEL 可選用 `bindings.FIXED_VEL = { type: "fixed-velocity", velocity: 10
 
 Profile 必填 `modeSelector`，預設 GROUP。可更換為一般按鍵；SHIFT、FAVORITES、BROWSER 保留快捷鍵用途，Encoder Touch 不作選擇鍵。選擇鍵在所有模式共用且不能同時配置 MIDI 映射；UI 更換前會確認是否移除該鍵已有的映射。
 
-每個模式必填 `selectorPad: PadId | null` 與 `color: 0..17`；名稱、選擇 Pad 與 Mode Color 互相獨立，同一 Pad 最多對應一個模式。新建 Profile 包含 A–H，分別對應 Pad 13–16、9–12；Pad 1–8 留空。複製模式會清除 selectorPad，待使用者指定。
+每個模式必填 `selectorPad: PadId | null` 與 `color: 0..17`，可選 `selectorButton: ButtonId`。指派按鍵時 `selectorPad` 必須為 null；按鍵須為前 39 個有燈號的實體按鍵，排除 SHIFT／FAVORITES／BROWSER 及 Profile 的 `modeSelector`。每個 Pad 或按鍵最多對應一個模式。Pad 與按鍵指派互斥，不影響該控制項在未按模式選擇鍵時的普通 MIDI 映射。Profile 繼續使用 `midiy-profile-v2`；未填 selectorButton 的 v2 Profile 保留原本 Pad 行為，不新增其他舊格式讀取或遷移。內建 Mikro MIDI 包含 A–H，分別對應 Pad 13–16、9–12；「＋」新增的空白 Profile 只有一個未指派 Mode。複製模式會清除 selectorPad／selectorButton，待使用者指定。
 
-MappingEngine 處理按住選擇與選擇 Pad 的事件抑制；切換模式沿用既有 flush，選擇時敲下的 Pad 放開前不產生 MIDI Hit／Press。Runtime 將 selectingMode 狀態提供給 UI 與 Driver；Driver 編碼選擇畫面，未指派 Pad 關閉，目前模式最亮，其餘已指派模式微亮。實體輸出仍須先啟用 LED 接管。
+MappingEngine 處理按住選擇與觸發 Pad／按鍵的事件抑制；切換模式沿用既有 flush，選擇時敲下的 Pad／按鍵放開前不產生原本 MIDI，跨模式按住的按鍵也必須先放開再使用新映射。Runtime 將 selectingMode 狀態提供給 UI 與 Driver；Driver 編碼選擇畫面，未指派 Pad／一般按鍵關閉，目前模式高亮（bright），其餘已指派模式微亮（dim）；按鍵使用單色，Pad 使用模式顏色。實體輸出仍須先啟用 LED 接管。

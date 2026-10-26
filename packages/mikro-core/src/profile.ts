@@ -39,7 +39,7 @@ export type PressureBinding =
   | { type: 'channel-pressure'; channel: MidiChannel; from: number; to: number }
   | { type: 'pitchbend'; channel: MidiChannel; from: number; to: number };
 export interface Mode {
-  id: string; name: string; selectorPad: PadId | null; color: number; bindings: Partial<Record<ControlId, Binding>>; pads: PadLight[];
+  id: string; name: string; selectorPad: PadId | null; selectorButton?: ButtonId; color: number; bindings: Partial<Record<ControlId, Binding>>; pads: PadLight[];
   pressureBindings?: Partial<Record<`PAD_${number}`, PressureBinding>>;
   padOnBrightness: Brightness;
   padOffBrightness: Brightness;
@@ -50,6 +50,7 @@ export interface Mode {
 export const PAD_VELOCITY_CURVES = ['soft-3', 'soft-2', 'soft-1', 'linear', 'hard-1', 'hard-2', 'hard-3'] as const;
 export type PadVelocityCurve = typeof PAD_VELOCITY_CURVES[number];
 export const MODE_SELECTOR_BUTTONS = BUTTON_IDS.filter(id => !['SHIFT', 'FAVORITES', 'BROWSER', 'ENCODER_TOUCH'].includes(id));
+export const MODE_TRIGGER_BUTTONS = MODE_SELECTOR_BUTTONS.filter(id => BUTTON_IDS.indexOf(id) < 39);
 export interface Profile { modeSelector: ButtonId; schema: 'midiy-profile-v2'; name: string; initialModeId: string; modes: Mode[]; padVelocityCurve: PadVelocityCurve }
 export function createMode(id: string, name: string): Mode {
   return { id, name, selectorPad: null, color: 11, bindings: { FIXED_VEL: { type: 'fixed-velocity', velocity: 127 } }, padOnBrightness: 'bright', padOffBrightness: 'dim',
@@ -75,13 +76,14 @@ export function parseProfile(value: unknown): Profile {
   if (p.schema !== 'midiy-profile-v2' || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.modes) || !p.modes.length || p.modes.length > 64) return fail();
   if (!PAD_VELOCITY_CURVES.includes(p.padVelocityCurve)) return fail();
   if (!MODE_SELECTOR_BUTTONS.includes(p.modeSelector)) return fail();
-  const assigned = p.modes.map(m => m?.selectorPad).filter(pad => pad !== null);
+  const assigned = p.modes.map(m => m?.selectorButton ?? m?.selectorPad).filter(control => control !== null);
   if (new Set(assigned).size !== assigned.length) return fail();
   const ids = p.modes.map(m => m?.id);
   if (new Set(ids).size !== ids.length || !ids.includes(p.initialModeId)) return fail();
   for (const m of p.modes) {
     if (!m || typeof m.id !== 'string' || !m.id || typeof m.name !== 'string' || !m.name.trim() || !Array.isArray(m.pads) || m.pads.length !== 16 || !m.bindings || typeof m.bindings !== 'object' || Array.isArray(m.bindings)) return fail();
     if (m.selectorPad !== null && !PAD_IDS.includes(m.selectorPad) || !Number.isInteger(m.color) || m.color < 0 || m.color > 17) return fail();
+    if (m.selectorButton !== undefined && (!MODE_TRIGGER_BUTTONS.includes(m.selectorButton) || m.selectorButton === p.modeSelector || m.selectorPad !== null)) return fail();
     if (m.bindings[p.modeSelector] && m.bindings[p.modeSelector]?.type !== 'none') return fail();
     if (Object.values(m.bindings).filter(b => b?.type === 'fixed-velocity').length > 1) return fail();
     for (const pad of m.pads) {

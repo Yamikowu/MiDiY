@@ -3,10 +3,11 @@ import { NoteInputs, noteFieldMarkup } from './note-input';
 import { mappingShortcut, EditHistory, selectControls, controlsInRect, commonActions, commonFields, patchControls, copyControls, pasteControls, isPadControl, type ControlCopy } from './editor-model';
 import { t, l, attribute, labelMarkup, labelAttributes, onLocaleChange, translateLabel, getLocale, formatError } from '../i18n/index';
 import {
-  MODE_SELECTOR_BUTTONS, PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
+  createMode, MODE_TRIGGER_BUTTONS, MODE_SELECTOR_BUTTONS, PAD_VELOCITY_CURVES, type PadVelocityCurve, parseProfile, PAD_IDS, PAD_COLORS, BUTTON_IDS,
   type Binding, type Brightness, type ControlId, type Profile, type InputEvent,
   type PadLight, type OutputReport, type PressureBinding, type StripLightMode
 } from '@midiy/mikro-core';
+import { MikroDriver } from '../devices/mikro-mk3/driver';
 import { TranslatorRuntime } from '../runtime/translator-runtime';
 import { renderHardware } from '../devices/mikro-mk3/hardware-view.js';
 import { getControl } from '../devices/mikro-mk3/controls.js';
@@ -45,6 +46,8 @@ export class TranslatorUI {
   private profile: Profile;
   private profileDirty = false;
   private bindingDirty = false;
+  private padTab: 'hit' | 'press' = 'hit';
+  private stripTab: 'position' | 'touch' = 'position';
   private editingProfile = false;
   private editingMode = false;
   private selected: ControlId = 'PAD_1';
@@ -55,11 +58,13 @@ export class TranslatorUI {
   private history: EditHistory;
   private hardwareSelectionPending = false;
   private followHardwareSelection = false;
-  private get activeModeId() { return this.runtime.activeModeId; }
+  private editorModeId: string;
+  private inspector: 'mode' | 'control' = 'control';
+  private readonly previewDriver = new MikroDriver();
   constructor(private readonly runtime: TranslatorRuntime, private readonly library: ProfileLibrary,
     private readonly options: TranslatorOptions) {
     this.notePreferences = options.notePreferences ?? new NotePreferences();
-    this.profile = library.current; this.history = new EditHistory(this.profile);
+    this.profile = library.current; this.editorModeId = this.profile.initialModeId; this.history = new EditHistory(this.profile);
     this.mount();
     this.notePreferences.subscribe(() => this.refreshNoteDisplay());
     let midiStatus = '', deviceStatus = '';
@@ -69,9 +74,16 @@ export class TranslatorUI {
         const device = JSON.stringify([event.state.device, event.state.ledEnabled, event.state.ledStatus]);
         if (device !== deviceStatus) { deviceStatus = device; this.renderDevice(); }
         if (midi !== midiStatus) { midiStatus = midi; this.renderPorts(); }
-        this.renderPressed(); this.queueModeLights(); this.previewBatch();
+        this.renderPlayingMode(); this.renderPressed(); this.queueModeLights(); this.previewBatch();
       } else if (event.type === 'decoded' && !event.handled) this.handleEvent(event.event);
-      else if (event.type === 'mode') { this.pendingPaste = null; this.batchChanges = {}; this.bindingDirty = false; this.renderModes(); this.renderBinding(); this.renderMap(); }
+      else if (event.type === 'mode') {
+        // Hardware mode changes may follow in the clean mapping editor; never replace Mode browsing or a draft.
+        if (this.inspector === 'control' && !this.bindingDirty && !this.editingMode) {
+          this.editorModeId = runtime.activeModeId;
+          this.renderModes(); this.renderBinding(); this.renderMap();
+        }
+        this.renderPlayingMode();
+      }
     });
     onLocaleChange(() => {
       // Translate labels in place: never re-render forms or reset their dirty state.
@@ -80,7 +92,7 @@ export class TranslatorUI {
       this.el('hit-heading').textContent = isPad(this.selected) ? t('pad_hit_strike') : this.selected === 'SMART_STRIP' ? t('strip_position_position') : 'MIDI OUTPUT';
       this.el('binding-summary').textContent = this.controlSummary(this.selected);
       this.noteInputs?.refresh();
-      this.renderModeShortcut(); this.renderHelp(); this.renderSaveState(); this.renderPorts(); this.renderDevice();
+      this.renderModeShortcut(); this.renderPlayingMode(); this.renderTriggerPicker(); this.renderHelp(); this.renderSaveState(); this.renderPorts(); this.renderDevice();
       this.renderMap(); this.renderPressed();
       if (this.bindingDirty) this.previewPadLight();
     });
@@ -100,26 +112,25 @@ export class TranslatorUI {
   private el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(`midi-${id}`) as T; }
   private mount(): void {
     this.el('panel').innerHTML = `
-      <section class="config-panel" ${attribute('aria-label', 'profiles_modes', {})}>
+      <section class="config-panel" ${attribute('aria-label', 'profiles_modes')}>
         <div class="config-row profile-config-row">
-          <label class="config-picker"><span class="config-picker-heading">${l('profile', {})}<span id="midi-save-status" class="save-status" role="status"></span></span><select id="midi-library" ${attribute('aria-label', 'select_profile', {})}></select><input id="midi-profile-name" maxlength="80" ${attribute('aria-label', 'edit_profile_name', {})} hidden></label>
-          <div class="config-actions"><button id="midi-profile-edit" class="outline">${l('edit', {})}</button><button id="midi-profile-duplicate" class="outline">${l('duplicate', {})}</button><button id="midi-save" class="primary" hidden>${l('save', {})}</button><button id="midi-profile-delete" class="text-button danger" hidden>${l('delete', {})}</button></div>
-          <div class="profile-file-actions"><button id="midi-export" class="text-button">${l('export', {})}</button><label class="text-button file-button" tabindex="0" role="button">${l('import', {})}<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
+          <label class="config-picker"><span class="config-picker-heading">${l('profile')}<span id="midi-save-status" class="save-status" role="status"></span></span><select id="midi-library" ${attribute('aria-label', 'select_profile')}></select><input id="midi-profile-name" maxlength="80" ${attribute('aria-label', 'edit_profile_name')} hidden></label>
+          <div class="config-actions"><button id="midi-profile-edit" class="outline" ${attribute('aria-label', 'edit')} ${attribute('title', 'edit')}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5L16 3ZM14 5l5 5"/></svg></button><button id="midi-profile-duplicate" class="outline" ${attribute('aria-label', 'duplicate')} ${attribute('title', 'duplicate')}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg></button><button id="midi-profile-new" class="outline" ${attribute('aria-label', 'add_profile')}>＋</button><button id="midi-save" class="rename-save" ${attribute('aria-label', 'save')} hidden>✔</button><button id="midi-profile-cancel" class="outline" ${attribute('aria-label', 'cancel')} hidden>✕</button><button id="midi-profile-delete" class="text-button danger delete-icon" ${attribute('aria-label', 'delete')} hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button></div>
+          <label class="profile-velocity" title="${html(t('applies_to_pad_hit_velocity_across_this_profile_and_saves_immediately_so'))}">${l('pad_velocity_curve')}<select id="midi-pad-velocity-curve">${PAD_VELOCITY_CURVES.map(value => `<option value="${value}">${value === 'linear' ? 'Linear' : value.replace('-', ' ').replace(/^./, c => c.toUpperCase())}</option>`).join('')}</select></label>
+          <div class="profile-file-actions"><button id="midi-export" class="text-button">${l('export')}</button><label class="text-button file-button" tabindex="0" role="button">${l('import')}<input id="midi-import" type="file" accept=".json,application/json" hidden></label></div>
         </div>
         <div class="config-row mode-config-row">
-          <label class="config-picker">${l('mode_name', {})}<select id="midi-mode" ${attribute('aria-label', 'select_mode', {})}></select><input id="midi-mode-name" maxlength="80" ${attribute('aria-label', 'edit_mode_name', {})} hidden></label>
-          <label>${l('mode_pad')}<select id="midi-mode-pad"></select></label>
-          <label>Mode Color<select id="midi-mode-color" aria-label="Mode Color">${PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('')}</select></label>
-          <label class="mode-selector-setting"><span class="config-picker-heading">${l('mode_selector_key')}<span id="midi-mode-shortcut" class="mode-shortcut"></span></span><select id="midi-mode-selector">${MODE_SELECTOR_BUTTONS.map(id => `<option value="${id}" ${labelAttributes(controlName(id))}>${html(controlName(id))}</option>`).join('')}</select></label>
-          <div class="config-actions"><button id="midi-mode-edit" class="outline">${l('edit', {})}</button><button id="midi-add-mode" class="outline">${l('duplicate', {})}</button><button id="midi-mode-save" class="primary" hidden>${l('save', {})}</button><button id="midi-delete-mode" class="text-button danger" hidden>${l('delete', {})}</button></div>
+          <label class="config-picker"><span class="config-picker-heading">Mode<span id="midi-playing-mode" class="mode-shortcut"></span></span><select id="midi-mode" ${attribute('aria-label', 'select_mode')}></select><input id="midi-mode-name" maxlength="80" ${attribute('aria-label', 'edit_mode_name')} hidden></label>
+          <div class="config-actions"><button id="midi-mode-edit" class="outline" ${attribute('aria-label', 'edit')} ${attribute('title', 'edit')}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5L16 3ZM14 5l5 5"/></svg></button><button id="midi-add-mode" class="outline" ${attribute('aria-label', 'duplicate')} ${attribute('title', 'duplicate')}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg></button><button id="midi-mode-new" class="outline" ${attribute('aria-label', 'add_mode')}>＋</button><button id="midi-mode-save" class="rename-save" ${attribute('aria-label', 'save')} hidden>✔</button><button id="midi-mode-cancel" class="outline" ${attribute('aria-label', 'cancel')} hidden>✕</button><button id="midi-delete-mode" class="text-button danger delete-icon" ${attribute('aria-label', 'delete')} hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button></div>
           <label class="switch default-switch"><input id="midi-initial" type="checkbox">${l('set_as_startup_mode', {})}</label>
+          <label class="mode-selector-setting"><span class="config-picker-heading">${l('mode_selector_key')}<span id="midi-mode-shortcut" class="mode-shortcut"></span></span><select id="midi-mode-selector">${MODE_SELECTOR_BUTTONS.map(id => `<option value="${id}" ${labelAttributes(controlName(id))}>${html(controlName(id))}</option>`).join('')}</select></label>
         </div>
       </section>
       <div class="workspace mapping-workspace">
         <section class="panel mapping-device">
           <div class="section-heading mapping-controller-heading">
-            <div><p class="eyebrow">HARDWARE</p><h2>${l('controller_reference', {})}</h2></div>
-            <div class="map-footer mapping-legend"><span><i class="dot selected-dot"></i>${l('selected', {})}</span><span><i class="dot mapped-dot"></i>${l('mapped', {})}</span><span><i class="dot idle-dot"></i>${l('unmapped', {})}</span></div>
+
+            <div class="map-footer mapping-legend"><span><i class="dot selected-dot"></i>${l('selected', {})}</span><span><i class="dot mapped-dot"></i><span id="midi-legend-mapped">${l('mapped', {})}</span></span><span><i class="dot idle-dot"></i><span id="midi-legend-unmapped">${l('unmapped', {})}</span></span></div>
             <span id="midi-mapped-count" class="section-note"></span>
           </div>
           <div class="hardware-scroll"><div id="midi-hardware" class="hardware" ${attribute('aria-label', 'mapping_controller_reference', {})}></div></div>
@@ -132,16 +143,32 @@ export class TranslatorUI {
             <label class="switch hardware-follow-toggle" title="${html(t('follow_hardware_selection_help'))}"><input id="midi-follow-hardware-selection" type="checkbox">${l('follow_hardware_selection', {})}</label>
           </div>
           </div>
-          <div class="device-settings">
-          <details class="device-options" open><summary>${l('device_lights', {})}<span id="midi-led-summary">${l('not_controlled', {})}</span></summary>
+          <div id="midi-note-preferences" class="note-preferences" hidden>
+            <label>${l('note_octave_reference')}<select id="midi-note-octave">${[3, 4, 5].map(o => `<option value="${o}">Note 60 = C${o}</option>`).join('')}</select></label>
+            <label>${l('note_input_method')}<select id="midi-note-input-mode"><option value="number" data-i18n="note_number_mode">${t('note_number_mode')}</option><option value="name" data-i18n="note_name_mode">${t('note_name_mode')}</option></select></label>
+          </div>
+        </section>
+        <aside class="panel mapping-editor" ${attribute('aria-label', 'control_editor', {})}>
+          <div class="inspector-tabs" role="tablist" ${attribute('aria-label', 'inspector_settings')}>
+            <button id="midi-mode-tab" role="tab" aria-controls="midi-mode-inspector" aria-selected="false" tabindex="-1">${l('mode_settings')}</button>
+            <button id="midi-control-tab" role="tab" aria-controls="midi-control-inspector" aria-selected="true">${l('control_settings')}</button>
+          </div>
+          <section id="midi-mode-inspector" role="tabpanel" aria-labelledby="midi-mode-tab" hidden>
+            <h2 id="midi-mode-title"></h2>
+            <div class="mode-fields">
+              <label>${l('mode_trigger')}<div class="mode-trigger-picker"><select id="midi-mode-trigger" ${attribute('aria-label', 'mode_trigger')}></select><button id="midi-clear-trigger" type="button" class="text-button" ${attribute('aria-label', 'clear_mode_trigger')} ${attribute('title', 'clear_mode_trigger')}>✕</button></div></label>
+              <label>${l('mode_color')}<select id="midi-mode-color" ${attribute('aria-label', 'mode_color')}></select></label>
+            </div>
+            <p id="midi-mode-selection-status" class="caption" role="status"></p>
+            <div class="device-settings">          <details class="device-options" open><summary>${l('device_lights', {})}<span id="midi-led-summary">${l('not_controlled', {})}</span></summary>
             <p id="midi-led-status" class="caption" role="status"></p>
             <p class="editor-section-label settings-scope">${l('shared_brightness_for_this_mode')}</p>
             <div class="led-settings">
-              <fieldset class="brightness-pair"><legend>Gate / Trigger / Inc</legend>
+              <fieldset class="brightness-pair"><legend>${l('button_gate_lights')}</legend>
                 <label>${l('idle_brightness')}<select id="midi-button-idle-brightness" ${attribute('aria-label', 'button_idle_brightness')}></select></label>
                 <label>${l('held_brightness')}<select id="midi-button-on-brightness" ${attribute('aria-label', 'button_pressed_brightness')}></select></label>
               </fieldset>
-              <fieldset class="brightness-pair"><legend>Toggle</legend>
+              <fieldset class="brightness-pair"><legend>${l('button_toggle_lights')}</legend>
                 <label>${l('off_brightness')}<select id="midi-toggle-button-off-brightness" ${attribute('aria-label', 'toggle_button_off_brightness')}></select></label>
                 <label>${l('on_brightness')}<select id="midi-toggle-button-on-brightness" ${attribute('aria-label', 'toggle_button_on_brightness')}></select></label>
               </fieldset>
@@ -152,29 +179,29 @@ export class TranslatorUI {
             </div>
             <p class="caption">${l('changes_save_immediately_to_this_mode_button_brightness_only_affects_map', {})}</p>
           </details>
-          <details class="device-options velocity-options" open><summary>${l('pad_velocity_curve', {})}</summary>
-            <p class="editor-section-label settings-scope">${l('entire_profile')}</p>
-            <div class="velocity-setting">
-              <label>Pad Velocity Curve<select id="midi-pad-velocity-curve">${PAD_VELOCITY_CURVES.map(value => `<option value="${value}">${value === 'linear' ? 'Linear' : value.replace('-', ' ').replace(/^./, c => c.toUpperCase())}</option>`).join('')}</select></label>
-            </div>
-            <p class="caption">${l('applies_to_pad_hit_velocity_across_this_profile_and_saves_immediately_so', {})}</p>
-          </details>
-          <p class="caption device-shortcuts">${l('led_takeover_shortcut')}</p>
-          </div>
-        </section>
-        <aside class="panel mapping-editor" ${attribute('aria-label', 'control_editor', {})}>
+<p class="caption device-shortcuts">${l('led_takeover_shortcut')}</p></div>
+          </section>
+          <section id="midi-control-inspector" role="tabpanel" aria-labelledby="midi-control-tab">
           <div class="editor-heading"><p class="eyebrow">CONTROL INSPECTOR</p><span id="midi-draft-state" class="draft-state" role="status">${l('applied', {})}</span></div>
           <h2 id="midi-selected">Pad 1</h2><p id="midi-binding-summary" class="binding-summary"></p>
-          <div class="note-preferences">
-            <label>${l('note_octave_reference')}<select id="midi-note-octave">${[3, 4, 5].map(o => `<option value="${o}">Note 60 = C${o}</option>`).join('')}</select></label>
-            <label>${l('note_input_method')}<select id="midi-note-input-mode"><option value="number" data-i18n="note_number_mode">${t('note_number_mode')}</option><option value="name" data-i18n="note_name_mode">${t('note_name_mode')}</option></select></label>
-          </div>
           <form id="midi-binding-form">
-            <div id="midi-hit-heading" class="editor-section-label">MIDI OUTPUT</div><label>${l('output_action', {})}<select id="midi-action"></select></label>
-            <div id="midi-fields" class="binding-fields"></div><div id="midi-strip-touch" class="binding-fields"></div><div id="midi-pad-press" class="binding-fields"></div><div id="midi-pad-light" class="binding-fields"></div>
+            <div id="midi-pad-tabs" class="inspector-tabs pad-binding-tabs" role="tablist" ${attribute('aria-label', 'control_binding_tabs')} hidden>
+              <button id="midi-hit-tab" type="button" role="tab" aria-controls="midi-hit-panel" aria-selected="true">${l('pad_hit_tab')}</button>
+              <button id="midi-press-tab" type="button" role="tab" aria-controls="midi-pad-press" aria-selected="false" tabindex="-1">${l('pad_press_tab')}</button>
+              <button id="midi-position-tab" type="button" role="tab" aria-controls="midi-hit-panel" aria-selected="true" hidden>${l('strip_position_tab')}</button>
+              <button id="midi-touch-tab" type="button" role="tab" aria-controls="midi-strip-touch" aria-selected="false" tabindex="-1" hidden>${l('strip_touch_tab')}</button>
+            </div>
+            <section id="midi-hit-panel" role="tabpanel" aria-labelledby="midi-hit-tab">
+              <div id="midi-hit-heading" class="editor-section-label">MIDI OUTPUT</div><label>${l('output_action', {})}<select id="midi-action"></select></label>
+              <div id="midi-fields" class="binding-fields"></div>
+            </section>
+            <div id="midi-pad-press" class="binding-fields" role="tabpanel" aria-labelledby="midi-press-tab" hidden></div>
+            <div id="midi-strip-touch" class="binding-fields" role="tabpanel" aria-labelledby="midi-touch-tab" hidden></div>
+            <div id="midi-pad-light" class="binding-fields"></div>
             <button id="midi-apply" class="primary wide" type="submit">${l('apply_to_current_mode', {})}</button>
           </form>
           <p id="midi-binding-help" class="caption"></p>
+          </section>
         </aside>
       </div>
       <div class="mapping-status"><span id="midi-status" role="status">${l('no_midi_output_selected', {})}</span><span>${l('profiles_are_saved_in_this_browser_export_as_json', {})}</span></div>`;
@@ -184,10 +211,38 @@ export class TranslatorUI {
     this.el<HTMLSelectElement>('note-input-mode').value = this.notePreferences.current.inputMode;
     this.el('note-octave').addEventListener('change', () => this.notePreferences.update({ middleC: Number(this.el<HTMLSelectElement>('note-octave').value) as MiddleC }));
     this.el('note-input-mode').addEventListener('change', () => this.notePreferences.update({ inputMode: this.el<HTMLSelectElement>('note-input-mode').value as NoteInputMode }));
+    const updateNotePreferences = () => {
+      this.el('note-preferences').hidden = this.inspector === 'mode' || this.el('binding-form').hidden || !this.el('binding-form').querySelector('[data-note-input]');
+    };
+    new MutationObserver(updateNotePreferences).observe(this.el('binding-form'), { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
     this.mountSelection();
     this.el<HTMLInputElement>('follow-hardware-selection').addEventListener('change', () => {
       this.followHardwareSelection = this.el<HTMLInputElement>('follow-hardware-selection').checked;
     });
+    for (const scope of ['hit', 'press', 'position', 'touch'] as const) {
+      const select = (next: typeof scope) => {
+        if (next === 'hit' || next === 'press') this.padTab = next;
+        else this.stripTab = next;
+        this.renderControlTabs();
+      };
+      this.el(`${scope}-tab`).addEventListener('click', () => select(scope));
+      this.el(`${scope}-tab`).addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const [first, last] = scope === 'hit' || scope === 'press' ? ['hit', 'press'] as const : ['position', 'touch'] as const;
+        const next = event.key === 'Home' ? first : event.key === 'End' ? last : scope === first ? last : first;
+        select(next); this.el(`${next}-tab`).focus();
+      });
+    }
+    // Reveal the first invalid field's tab before the browser attempts to focus it.
+    let revealingInvalid = false;
+    this.el('binding-form').addEventListener('invalid', event => {
+      if (this.el('pad-tabs').hidden || revealingInvalid) return;
+      revealingInvalid = true;
+      this.padTab = this.el('pad-press').contains(event.target as Node) ? 'press' : 'hit';
+      this.stripTab = this.el('strip-touch').contains(event.target as Node) ? 'touch' : 'position';
+      this.renderControlTabs(); queueMicrotask(() => { revealingInvalid = false; });
+    }, true);
     this.el('binding-form').addEventListener('input', () => this.markBindingDirty());
     this.el('binding-form').addEventListener('change', () => this.markBindingDirty());
     this.el('pad-light').addEventListener('input', () => this.previewPadLight());
@@ -208,6 +263,37 @@ export class TranslatorUI {
       if (id === 'bind-touch-type') this.renderTouchFields(undefined, true);
       if (id === 'bind-touch-style') this.syncCcFields('strip-touch', 'touch-');
     });
+    for (const scope of ['profile', 'mode'] as const) {
+      this.el(`${scope}-cancel`).addEventListener('click', () => this.cancelRename(scope));
+      this.el(`${scope}-new`).addEventListener('click', () => this.guard(() => this.addBlank(scope)));
+    }
+    const showInspector = (scope: 'mode' | 'control') => {
+      this.inspector = scope;
+      const owner = scope === 'mode' && this.selection.size === 1 ? this.profile.modes.find(mode => (mode.selectorButton ?? mode.selectorPad) === this.selected) : undefined;
+      if (owner && owner.id !== this.editorModeId && !this.bindingDirty && !this.editingMode) {
+        this.editorModeId = owner.id; this.renderModes(); this.renderBinding();
+      }
+      for (const name of ['mode', 'control']) {
+        const active = name === scope;
+        this.el(`${name}-tab`).setAttribute('aria-selected', String(active));
+        this.el(`${name}-tab`).tabIndex = active ? 0 : -1;
+        this.el(`${name}-inspector`).hidden = !active;
+      }
+      this.renderMap(); this.renderPressed(); this.queueModeLights();
+      if (scope === 'control' && this.bindingDirty) { this.previewPadLight(); this.previewBatch(); }
+      this.el('note-preferences').hidden = scope === 'mode' || this.el('binding-form').hidden || !this.el('binding-form').querySelector('[data-note-input]');
+    };
+    for (const scope of ['mode', 'control'] as const) {
+      this.el(`${scope}-tab`).addEventListener('click', () => showInspector(scope));
+      this.el(`${scope}-tab`).addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 'mode' : event.key === 'End' ? 'control' : scope === 'mode' ? 'control' : 'mode';
+        showInspector(next); this.el(`${next}-tab`).focus();
+      });
+    }
+    this.el('mode-trigger').addEventListener('change', () => this.guard(() => this.setModeTrigger(this.el<HTMLSelectElement>('mode-trigger').value as ControlId | '')));
+    this.el('clear-trigger').addEventListener('click', () => this.guard(() => this.setModeTrigger('')));
     this.el('profile-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('mode-name').addEventListener('input', () => { this.profileDirty = true; this.renderSaveState(); });
     this.el('profile-edit').addEventListener('click', () => {
@@ -229,7 +315,7 @@ export class TranslatorUI {
     }));
     this.el('profile-name').addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); this.save(); }
-      if (event.key === 'Escape') { this.editingProfile = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
+      if (event.key === 'Escape') { this.cancelRename('profile'); }
     });
     this.el('library').addEventListener('change', () => this.guard(async () => {
       const id = this.el<HTMLSelectElement>('library').value;
@@ -243,7 +329,7 @@ export class TranslatorUI {
     }));
     this.el('mode').addEventListener('change', async () => {
       if (!await this.discardBindingDraft()) { this.renderModes(); return; }
-      this.runtime.switchMode(this.el<HTMLSelectElement>('mode').value);
+      this.editorModeId = this.el<HTMLSelectElement>('mode').value;
       this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
     });
     this.el('mode-edit').addEventListener('click', () => {
@@ -253,7 +339,7 @@ export class TranslatorUI {
     this.el('mode-save').addEventListener('click', () => this.saveModeEdit());
     this.el('mode-name').addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); this.saveModeEdit(); }
-      if (event.key === 'Escape') { this.editingMode = false; this.profileDirty = false; this.renderEditStates(); this.renderSaveState(); }
+      if (event.key === 'Escape') { this.cancelRename('mode'); }
     });
     this.el('action').addEventListener('change', () => {
       if (this.selection.size !== 1 || this.pendingPaste) return;
@@ -270,8 +356,8 @@ export class TranslatorUI {
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length >= 64) return this.options.toast(t('up_to_64_modes_are_supported'));
       const copy = JSON.parse(JSON.stringify(this.currentMode()));
-      copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`; copy.selectorPad = null;
-      this.profile.modes.push(copy); this.commit(); this.runtime.switchMode(copy.id);
+      copy.id = crypto.randomUUID(); copy.name = `${copy.name} copy`; copy.selectorPad = null; delete copy.selectorButton;
+      this.profile.modes.push(copy); this.editorModeId = copy.id; this.commit();
       this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
       this.editingMode = true; this.renderEditStates(); this.el<HTMLInputElement>('mode-name').focus();
       this.el<HTMLInputElement>('mode-name').select();
@@ -280,7 +366,7 @@ export class TranslatorUI {
       if (!await this.discardBindingDraft()) return;
       if (this.profile.modes.length === 1) return this.options.toast(t('keep_at_least_one_mode'));
       if (!await confirmAction(t('delete_mode_actions_targeting_this_mode_will_be_disabled', { p0: this.currentMode().name }), t('delete_mode'))) return;
-      const removed = this.activeModeId;
+      const removed = this.editorModeId;
       this.profile.modes = this.profile.modes.filter(m => m.id !== removed);
       for (const mode of this.profile.modes) for (const [id, binding] of Object.entries(mode.bindings)) {
         if (binding?.type === 'mode' && binding.modeId === removed) delete mode.bindings[id as ControlId];
@@ -288,16 +374,10 @@ export class TranslatorUI {
       if (this.profile.initialModeId === removed) this.profile.initialModeId = this.profile.modes[0].id;
       this.editingMode = false; this.commit(); this.renderBinding(); this.renderEditStates();
     });
-    this.el('mode-pad').addEventListener('change', () => this.guard(async () => {
-      if (!await this.discardBindingDraft()) return this.renderModes();
-      const next = parseProfile(this.profile);
-      next.modes.find(mode => mode.id === this.activeModeId)!.selectorPad = this.el<HTMLSelectElement>('mode-pad').value as `PAD_${number}` || null;
-      parseProfile(next); this.profile = next; this.commit();
-    }));
     this.el('mode-color').addEventListener('change', () => this.guard(() => {
       if (!this.currentMode().selectorPad) return this.renderModes();
       const next = parseProfile(this.profile);
-      next.modes.find(mode => mode.id === this.activeModeId)!.color = Number(this.el<HTMLSelectElement>('mode-color').value);
+      next.modes.find(mode => mode.id === this.editorModeId)!.color = Number(this.el<HTMLSelectElement>('mode-color').value);
       try {
         this.library.save(next); this.profile = next; this.history.record(next);
         this.runtime.updateFeedback(next); this.renderSaveState();
@@ -307,6 +387,7 @@ export class TranslatorUI {
       const key = this.el<HTMLSelectElement>('mode-selector').value as Profile['modeSelector'];
       if (!await this.discardBindingDraft()) return this.renderModes();
       const next = parseProfile(this.profile);
+      if (next.modes.some(mode => mode.selectorButton === key)) return this.renderModes();
       if (next.modes.some(mode => mode.bindings[key] && mode.bindings[key]?.type !== 'none')
         && !await confirmAction(t('replace_selector_binding'), t('mode_selector_key'))) return this.renderModes();
       next.modeSelector = key;
@@ -314,7 +395,7 @@ export class TranslatorUI {
       this.profile = parseProfile(next); this.commit(); this.renderBinding();
     }));
     this.el('initial').addEventListener('change', () => {
-      if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.activeModeId; this.commit(); }
+      if (this.el<HTMLInputElement>('initial').checked) { this.profile.initialModeId = this.editorModeId; this.commit(); }
       else this.renderModes();
     });
     this.el('save').addEventListener('click', () => this.save());
@@ -344,6 +425,7 @@ export class TranslatorUI {
     this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderPorts(); this.renderDevice(); this.renderSaveState(); this.queueModeLights();
   }
   private renderEditActions(): void {
+    this.renderTriggerPicker();
     this.el<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     this.el<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     this.el<HTMLButtonElement>('copy-controls').disabled = !this.selection.size;
@@ -351,11 +433,15 @@ export class TranslatorUI {
     this.el('selection-count').textContent = t('selected_control_count', { p0: this.selection.size });
   }
   private async selectGroup(ids: ControlId[]): Promise<void> {
-    if (ids.length === this.selection.size && ids.every(id => this.selection.has(id))) return;
+    const target = this.inspector === 'mode' && ids.length === 1 ? this.profile.modes.find(mode => (mode.selectorButton ?? mode.selectorPad) === ids[0]) : undefined;
+    const changingMode = target && target.id !== this.editorModeId;
+    if (!changingMode && ids.length === this.selection.size && ids.every(id => this.selection.has(id))) return;
+    if (changingMode && this.editingMode) return this.options.toast(t('finish_name_edit_first'));
     if (!await this.discardBindingDraft()) return;
+    if (target) this.editorModeId = target.id;
     this.selection = new Set(ids); this.batchChanges = {}; this.pendingPaste = null;
     this.selected = ids[0] ?? this.selected;
-    this.renderBinding(); this.renderMap();
+    this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights();
   }
   private mountSelection(): void {
     const hardware = this.el('hardware');
@@ -413,14 +499,14 @@ export class TranslatorUI {
       this.batchChanges = { ...Object.fromEntries(Object.entries(this.batchChanges).filter(([key]) => !key.startsWith('hit.'))), action: this.el<HTMLSelectElement>('action').value };
       this.markBindingDirty(); this.renderBatch();
     });
-    this.el('fields').addEventListener('input', event => {
+    this.el('binding-form').addEventListener('input', event => {
       const input = event.target as HTMLInputElement;
       if (!input.dataset.batchKey) return;
       if (input.value === '') delete this.batchChanges[input.dataset.batchKey];
       else this.batchChanges[input.dataset.batchKey] = input.type === 'number' ? Number(input.value) : input.value;
       this.markBindingDirty(); this.previewBatch();
     });
-    this.el('fields').addEventListener('change', event => {
+    this.el('binding-form').addEventListener('change', event => {
       const input = event.target as HTMLInputElement;
       const key = input.dataset.batchKey; if (!key) return;
       if (input.value === '') delete this.batchChanges[key];
@@ -432,13 +518,13 @@ export class TranslatorUI {
   }
   private copySelection(): void {
     if (!this.selection.size) return;
-    this.copied = copyControls(this.profile, this.activeModeId, [...this.selection]);
+    this.copied = copyControls(this.profile, this.editorModeId, [...this.selection]);
     this.renderEditActions(); this.options.toast(t('controls_copied', { p0: this.copied.length }));
   }
   private async pasteSelection(): Promise<void> {
     if (!this.selection.size || !this.copied.length) return;
     let draft: Profile;
-    try { draft = pasteControls(this.profile, this.activeModeId, [...this.selection], this.copied); }
+    try { draft = pasteControls(this.profile, this.editorModeId, [...this.selection], this.copied); }
     catch (error) { this.options.toast(t(error instanceof Error && error.message === 'paste_count_mismatch' ? 'paste_count_mismatch' : 'paste_incompatible')); return; }
     if (!await this.discardBindingDraft()) return;
     this.pendingPaste = draft; this.markBindingDirty(); this.renderBatch(); this.previewBatch();
@@ -457,12 +543,36 @@ export class TranslatorUI {
         color: undefined, buttonLight: undefined, toggleButtonLight: undefined, padOffBrightness: undefined, padOnBrightness: undefined
       }))
     });
-    this.history.move(redo); this.profile = next; this.profileDirty = false;
+    this.history.move(redo); this.profile = next; this.ensureEditorMode(); this.profileDirty = false;
     if (structure(previous) === structure(next)) { this.runtime.updateFeedback(next); this.runtime.setVelocityCurve(next.padVelocityCurve); }
     else this.runtime.applyProfile(next);
     this.renderLibrary(); this.renderModes(); this.renderBinding(); this.renderMap(); this.renderPressed(); this.queueModeLights(); this.renderSaveState();
   }
+  private renderControlTabs(): void {
+    const pads = this.selection.size > 0 && [...this.selection].every(isPad) && !this.pendingPaste;
+    const strip = this.selection.size === 1 && this.selected === 'SMART_STRIP' && !this.pendingPaste;
+    const enabled = pads || strip, active = strip ? this.stripTab : this.padTab;
+    this.el('pad-tabs').hidden = !enabled;
+    this.el('binding-form').classList.toggle('has-pad-tabs', pads);
+    this.el('binding-form').classList.toggle('has-strip-tabs', strip);
+    this.el('hit-panel').hidden = enabled && active !== 'hit' && active !== 'position';
+    this.el('pad-press').hidden = !pads || active !== 'press';
+    this.el('strip-touch').hidden = !strip || active !== 'touch';
+    for (const scope of ['hit', 'press', 'position', 'touch'] as const) {
+      this.el(`${scope}-tab`).hidden = scope === 'hit' || scope === 'press' ? !pads : !strip;
+      this.el(`${scope}-tab`).setAttribute('aria-selected', String(scope === active));
+      this.el(`${scope}-tab`).tabIndex = scope === active ? 0 : -1;
+    }
+    if (enabled) {
+      this.el('hit-panel').setAttribute('role', 'tabpanel');
+      this.el('hit-panel').setAttribute('aria-labelledby', strip ? 'midi-position-tab' : 'midi-hit-tab');
+    } else {
+      this.el('hit-panel').removeAttribute('role');
+      this.el('hit-panel').removeAttribute('aria-labelledby');
+    }
+  }
   private renderBatch(): void {
+    this.renderControlTabs();
     const ids = [...this.selection];
     this.el('selected').textContent = t('selected_control_count', { p0: ids.length });
     this.el('binding-form').hidden = !ids.length || ids.includes(this.profile.modeSelector);
@@ -480,15 +590,15 @@ export class TranslatorUI {
       this.el('binding-help').textContent = ''; return;
     }
     let view = this.profile;
-    try { view = patchControls(this.profile, this.activeModeId, ids, this.batchChanges); } catch { /* Keep incomplete draft editable; apply validates atomically. */ }
-    const mode = view.modes.find(m => m.id === this.activeModeId)!;
+    try { view = patchControls(this.profile, this.editorModeId, ids, this.batchChanges); } catch { /* Keep incomplete draft editable; apply validates atomically. */ }
+    const mode = view.modes.find(m => m.id === this.editorModeId)!;
     const actionOf = (id: ControlId) => { const binding = mode.bindings[id]; return binding?.type === 'button-value' || binding?.type === 'strip-position' ? binding.output : binding?.type ?? 'none'; };
     const action = ids.every(id => actionOf(id) === actionOf(ids[0])) ? actionOf(ids[0]) : '';
     const actionLabels: Record<string, string> = { none: t('disabled'), note: 'MIDI Note', cc: 'MIDI CC', mode: t('switch_mode'), 'poly-pressure': 'Poly Pressure', 'channel-pressure': 'Channel Pressure', program: 'Program Change', pitchbend: 'Pitchbend' };
     actionSelect.innerHTML = `<option value="" disabled>${t('multiple_values')}</option>` + commonActions(ids).map(value => `<option value="${value}">${actionLabels[value] ?? value}</option>`).join('');
     actionSelect.value = action;
     this.el('hit-heading').textContent = ids.every(isPadControl) ? t('pad_hit_strike') : 'MIDI OUTPUT';
-    const fields = commonFields(view, this.activeModeId, ids);
+    const fields = commonFields(view, this.editorModeId, ids);
     const fieldLabel = (label: string) => label.includes('_') ? t(label as Parameters<typeof t>[0]) : label;
     const sections: Record<string, string> = { hit: '', press: '', pad: '' };
     if (ids.every(isPadControl)) {
@@ -512,19 +622,21 @@ export class TranslatorUI {
         ? `<select data-batch-key="${field.key}" data-batch-number="${field.key.startsWith('pad.') && field.key !== 'pad.dual' ? 'true' : 'false'}"><option value="" ${value === '' ? 'selected' : ''} disabled>${t('multiple_values')}</option>${options.map(option => `<option value="${html(option.value)}" ${String(value) === option.value ? 'selected' : ''}>${html(field.key === 'pad.dual' ? option.value === 'true' ? 'Dual' : 'Single' : option.label)}</option>`).join('')}</select>`
         : `<input type="number" data-batch-key="${field.key}" min="${field.min}" max="${field.max}" step="1" value="${html(value)}" placeholder="${t('multiple_values')}">`}</label>`;
     }
-    this.el('fields').innerHTML = `<p class="caption batch-hint">${l('batch_edit_hint')}</p>` + sections.hit + sections.press + sections.pad;
+    this.el('fields').innerHTML = `<p class="caption batch-hint">${l('batch_edit_hint')}</p>` + sections.hit;
+    this.el('pad-press').innerHTML = sections.press;
+    this.el('pad-light').innerHTML = sections.pad;
     this.noteInputs?.refresh();
     this.el('binding-help').textContent = t('selection_shortcuts_hint');
     this.renderEditActions();
   }
   private previewBatch(): void {
-    if (this.runtime.snapshot.selectingMode) return;
+    if (this.inspector === 'mode' || this.runtime.snapshot.selectingMode) return;
     let draft = this.pendingPaste;
     if (!draft && this.selection.size > 1) {
-      try { draft = patchControls(this.profile, this.activeModeId, [...this.selection], this.batchChanges); } catch { return; }
+      try { draft = patchControls(this.profile, this.editorModeId, [...this.selection], this.batchChanges); } catch { return; }
     }
     if (!draft) return;
-    const mode = draft.modes.find(m => m.id === this.activeModeId)!;
+    const mode = draft.modes.find(m => m.id === this.editorModeId)!;
     for (const id of this.selection) if (isPadControl(id)) {
       const button = this.el('hardware').querySelector<HTMLButtonElement>(`[data-control="${id}"]`);
       const light = mode.pads[Number(id.slice(4)) - 1];
@@ -534,7 +646,10 @@ export class TranslatorUI {
   private async guard(action: () => void | Promise<void>): Promise<void> {
     try { await action(); } catch (error) { this.options.toast(formatError(error)); }
   }
-  private currentMode() { return this.profile.modes.find(m => m.id === this.activeModeId)!; }
+  private ensureEditorMode(): void {
+    if (!this.profile.modes.some(mode => mode.id === this.editorModeId)) this.editorModeId = this.profile.initialModeId;
+  }
+  private currentMode() { return this.profile.modes.find(m => m.id === this.editorModeId)!; }
   async selectControl(id: ControlId, extend = false): Promise<void> {
     await this.selectGroup(selectControls([...this.selection], [id], extend));
   }
@@ -564,9 +679,11 @@ export class TranslatorUI {
     for (const [id, hidden] of [
       ['library', this.editingProfile], ['profile-name', !this.editingProfile],
       ['profile-edit', this.editingProfile], ['profile-duplicate', this.editingProfile],
+      ['profile-new', this.editingProfile], ['profile-cancel', !this.editingProfile],
       ['save', !this.editingProfile], ['profile-delete', !this.editingProfile],
       ['mode', this.editingMode], ['mode-name', !this.editingMode],
       ['mode-edit', this.editingMode], ['add-mode', this.editingMode],
+      ['mode-new', this.editingMode], ['mode-cancel', !this.editingMode],
       ['mode-save', !this.editingMode], ['delete-mode', !this.editingMode]
     ] as [string, boolean][]) this.el(id).hidden = hidden;
     this.el<HTMLButtonElement>('profile-delete').disabled = this.library.entries.length <= 1;
@@ -580,28 +697,54 @@ export class TranslatorUI {
     this.renderEditActions();
   }
   private loadProfile(profile: Profile, dirty: boolean): void {
-    this.profile = profile; this.history = new EditHistory(profile); this.batchChanges = {}; this.pendingPaste = null; this.runtime.applyProfile(profile, true);
+    this.profile = profile; this.editorModeId = profile.initialModeId; this.history = new EditHistory(profile); this.batchChanges = {}; this.pendingPaste = null; this.runtime.applyProfile(profile, true);
     this.profileDirty = dirty; this.bindingDirty = false; this.editingProfile = false; this.editingMode = false;
     this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     this.renderLibrary(); this.renderModes(); this.renderEditStates(); this.renderBinding(); this.renderMap(); this.renderSaveState(); this.queueModeLights();
   }
+  private renderPlayingMode(): void {
+    const name = this.profile.modes.find(mode => mode.id === this.runtime.activeModeId)?.name ?? '';
+    this.el('playing-mode').textContent = t('playing_mode', { p0: name });
+    this.el('mode').title = t('edit_mode_only');
+  }
+  private async setModeTrigger(control: ControlId | ''): Promise<void> {
+    if (control && (control === this.profile.modeSelector || !isPad(control) && !MODE_TRIGGER_BUTTONS.includes(control as typeof MODE_TRIGGER_BUTTONS[number])
+      || this.profile.modes.some(mode => mode.id !== this.editorModeId && (mode.selectorButton ?? mode.selectorPad) === control))) return this.renderTriggerPicker();
+    if (!await this.discardBindingDraft()) return this.renderTriggerPicker();
+    const next = parseProfile(this.profile), mode = next.modes.find(mode => mode.id === this.editorModeId)!;
+    mode.selectorPad = control && isPad(control) ? control : null;
+    if (control && !isPad(control)) mode.selectorButton = control as NonNullable<typeof mode.selectorButton>;
+    else delete mode.selectorButton;
+    this.profile = parseProfile(next); this.commit(); this.renderBinding();
+  }
+  private renderTriggerPicker(): void {
+    const picker = this.el<HTMLSelectElement>('mode-trigger');
+    picker.innerHTML = `<option value="">${t('unassigned_mode_pad')}</option>` + [...PAD_IDS, ...MODE_TRIGGER_BUTTONS].filter(id => id !== this.profile.modeSelector).map(id => {
+      const owner = this.profile.modes.find(mode => (mode.selectorButton ?? mode.selectorPad) === id);
+      const occupied = owner && owner.id !== this.editorModeId;
+      return `<option value="${id}" ${occupied ? 'disabled' : ''}>${html(controlName(id))}${occupied ? ` · ${html(owner.name)} (${t('assigned_mode_pad')})` : ''}</option>`;
+    }).join('');
+    picker.value = this.currentMode().selectorButton ?? this.currentMode().selectorPad ?? '';
+    this.el<HTMLButtonElement>('clear-trigger').disabled = !picker.value;
+    const owner = this.profile.modes.find(mode => (mode.selectorButton ?? mode.selectorPad) === this.selected);
+    this.el('mode-selection-status').textContent = this.selection.size === 1 ? t('mode_selection_status', { p0: controlName(this.selected), p1: owner?.name ?? t('unassigned_mode_pad') }) : t('selected_control_count', { p0: this.selection.size });
+  }
   private renderModeShortcut(): void {
-    const pad = this.currentMode().selectorPad;
-    this.el('mode-shortcut').textContent = pad ? `${controlName(this.profile.modeSelector)} + Pad ${pad.slice(4)}` : t('unassigned_mode_pad');
+    const mode = this.currentMode(), control = mode.selectorButton ?? mode.selectorPad;
+    this.el('mode-shortcut').textContent = control ? `${controlName(this.profile.modeSelector)} + ${controlName(control)}` : t('unassigned_mode_pad');
   }
   private renderModes(): void {
+    this.ensureEditorMode(); this.renderPlayingMode();
     this.renderModeShortcut();
     this.el<HTMLSelectElement>('mode').innerHTML = this.profile.modes.map(m => `<option value="${html(m.id)}">${html(m.name)}</option>`).join('');
-    this.el<HTMLSelectElement>('mode').value = this.activeModeId;
+    this.el<HTMLSelectElement>('mode').value = this.editorModeId;
     if (!this.editingProfile) this.el<HTMLInputElement>('profile-name').value = this.profile.name;
     if (!this.editingMode) this.el<HTMLInputElement>('mode-name').value = this.currentMode().name;
     const mode = this.currentMode();
+    this.el('mode-title').textContent = mode.name;
     this.el<HTMLSelectElement>('mode-selector').value = this.profile.modeSelector;
-    this.el<HTMLSelectElement>('mode-pad').innerHTML = `<option value="" data-i18n="unassigned_mode_pad">${t('unassigned_mode_pad')}</option>` + PAD_IDS.map(id => {
-      const occupied = this.profile.modes.some(other => other.id !== mode.id && other.selectorPad === id);
-      return `<option value="${id}" ${occupied ? 'disabled' : ''}>Pad ${id.slice(4)}${occupied ? ` · ${t('assigned_mode_pad')}` : ''}</option>`;
-    }).join('');
-    this.el<HTMLSelectElement>('mode-pad').value = mode.selectorPad ?? '';
+    for (const option of this.el<HTMLSelectElement>('mode-selector').options) option.disabled = this.profile.modes.some(candidate => candidate.selectorButton === option.value);
+    this.renderTriggerPicker();
     const colorSelect = this.el<HTMLSelectElement>('mode-color');
     colorSelect.disabled = mode.selectorPad === null;
     colorSelect.innerHTML = mode.selectorPad === null
@@ -609,7 +752,8 @@ export class TranslatorUI {
       : PAD_COLORS.map((name, i) => `<option value="${i}">${name}</option>`).join('');
     colorSelect.value = mode.selectorPad === null ? '' : String(mode.color);
     colorSelect.style.setProperty('--mode-color', mode.selectorPad === null ? 'transparent' : PAD_PREVIEW[mode.color]);
-    this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.activeModeId;
+    this.el<HTMLInputElement>('initial').checked = this.profile.initialModeId === this.editorModeId;
+    this.el<HTMLInputElement>('initial').disabled = this.profile.initialModeId === this.editorModeId;
     this.renderLedSettings();
   }
   private renderLedSettings(): void {
@@ -640,7 +784,7 @@ export class TranslatorUI {
     const on = this.el<HTMLSelectElement>('button-on-brightness').value as Brightness;
     const padOn = this.el<HTMLSelectElement>('pad-on-brightness').value as Brightness;
     const next = parseProfile(this.profile);
-    const mode = next.modes.find(m => m.id === this.activeModeId)!;
+    const mode = next.modes.find(m => m.id === this.editorModeId)!;
     mode.buttonLight = { off, on };
     mode.toggleButtonLight = {
       off: this.el<HTMLSelectElement>('toggle-button-off-brightness').value as Brightness,
@@ -658,6 +802,7 @@ export class TranslatorUI {
     }
   }
   private renderBinding(): void {
+    this.renderControlTabs();
     if (this.selection.size !== 1 || this.pendingPaste) { this.renderBatch(); return; }
     this.batchChanges = {};
     this.el('action').closest('label')!.hidden = false;
@@ -876,7 +1021,7 @@ export class TranslatorUI {
     if (this.pendingPaste || this.selection.size !== 1) {
       if (!this.selection.size) return;
       if (!this.el<HTMLFormElement>('binding-form').reportValidity()) return;
-      const next = this.pendingPaste ?? patchControls(this.profile, this.activeModeId, [...this.selection], this.batchChanges);
+      const next = this.pendingPaste ?? patchControls(this.profile, this.editorModeId, [...this.selection], this.batchChanges);
       this.profile = next; this.pendingPaste = null; this.batchChanges = {}; this.bindingDirty = false;
       this.commit(); this.renderBinding(); return;
     }
@@ -933,7 +1078,7 @@ export class TranslatorUI {
       else b = { ...shared, mode: 'inc', from: num('from'), to: num('to'), step: num('step'), wrap: (document.getElementById('bind-wrap') as HTMLInputElement).checked, ...actionOn };
     }
     const next = JSON.parse(JSON.stringify(this.profile)) as Profile;
-    const mode = next.modes.find(m => m.id === this.activeModeId)!;
+    const mode = next.modes.find(m => m.id === this.editorModeId)!;
     if (this.selected === next.modeSelector) return;
     if (b.type === 'fixed-velocity') for (const [id, binding] of Object.entries(mode.bindings)) {
       if (binding?.type === 'fixed-velocity') delete mode.bindings[id as ControlId];
@@ -981,16 +1126,40 @@ export class TranslatorUI {
     const saved = this.commit(); this.renderBinding();
     if (saved) this.options.toast(t('applied_to_the_current_mode_and_saved_the_profile'));
   }
+  private cancelRename(scope: 'profile' | 'mode'): void {
+    if (scope === 'profile') this.editingProfile = false;
+    else this.editingMode = false;
+    this.el<HTMLInputElement>(`${scope}-name`).value = scope === 'profile' ? this.profile.name : this.currentMode().name;
+    this.profileDirty = false; this.renderEditStates(); this.renderSaveState();
+  }
+  private async addBlank(scope: 'profile' | 'mode'): Promise<void> {
+    if (this.editingProfile || this.editingMode) return this.options.toast(t(this.editingProfile ? 'save_the_profile_name_first' : 'save_the_mode_name_first'));
+    if (!await this.discardBindingDraft()) return;
+    if (scope === 'mode' && this.profile.modes.length >= 64) return this.options.toast(t('up_to_64_modes_are_supported'));
+    const mode = createMode(crypto.randomUUID(), t('new_mode'));
+    mode.bindings = {};
+    if (scope === 'profile') {
+      const profile: Profile = { schema: 'midiy-profile-v2', name: t('new_profile'), modeSelector: 'GROUP', padVelocityCurve: 'linear', initialModeId: mode.id, modes: [mode] };
+      this.library.save(profile, true); this.loadProfile(profile, false); this.editingProfile = true;
+    } else {
+      const next = parseProfile(this.profile); next.modes.push(mode);
+      this.library.save(next); this.profile = next; this.editorModeId = mode.id; this.runtime.applyProfile(next); this.history.record(next);
+      this.editingMode = true;
+      this.renderModes(); this.renderBinding(); this.renderMap();
+    }
+    this.renderEditStates(); this.renderSaveState();
+    this.el<HTMLInputElement>(`${scope}-name`).focus(); this.el<HTMLInputElement>(`${scope}-name`).select();
+  }
   private saveModeEdit(): void {
     const name = this.el<HTMLInputElement>('mode-name').value.trim();
     if (!name) return this.options.toast(t('enter_a_mode_name'));
-    if (this.bindingDirty && !this.applyPending()) return;
     this.currentMode().name = name; this.editingMode = false;
-    const saved = this.commit(); this.renderBinding();
+    const saved = this.commit();
     if (!saved) this.editingMode = true;
     this.renderEditStates();
   }
   private commit(): boolean {
+    this.ensureEditorMode();
     this.runtime.applyProfile(this.profile); this.history.record(this.profile); this.renderPressed();
     let saved = false;
     try {
@@ -1015,7 +1184,9 @@ export class TranslatorUI {
     this.profile.name = name; return true;
   }
   private save(): void {
-    if (!this.applyPending()) return;
+    const name = this.el<HTMLInputElement>('profile-name').value.trim();
+    if (!name) return this.options.toast(t('enter_a_profile_name'));
+    this.profile.name = name;
     try {
       this.library.save(this.profile); this.history.record(this.profile); this.profileDirty = false; this.editingProfile = false;
       this.renderLibrary(); this.renderEditStates(); this.renderSaveState();
@@ -1079,7 +1250,7 @@ export class TranslatorUI {
     button.dataset.brightness = light.brightness;
   }
   private previewPadLight(): void {
-    if (this.runtime.snapshot.selectingMode) return;
+    if (this.inspector === 'mode' || this.runtime.snapshot.selectingMode) return;
     const draft = this.readPadLightDraft();
     if (!draft) return;
     const saved = this.currentMode().pads[Number(this.selected.slice(4)) - 1];
@@ -1091,7 +1262,31 @@ export class TranslatorUI {
     button.setAttribute('aria-label', t('select', { p0: button.title }));
     button.removeAttribute('data-i18n-aria-label'); button.removeAttribute('data-i18n-aria-label-params');
   }
+  private renderModeMap(): void {
+    this.el('hardware').classList.add('mode-preview');
+    this.el('hardware').querySelectorAll<HTMLButtonElement>('[data-control]').forEach(button => {
+      const id = button.dataset.control as ControlId;
+      const target = this.profile.modes.find(mode => (mode.selectorButton ?? mode.selectorPad) === id);
+      button.classList.toggle('selected', this.selection.has(id));
+      button.classList.toggle('is-mapped', !!target); button.classList.toggle('is-mode-current', target?.id === this.editorModeId);
+      button.classList.remove('is-pressed'); button.setAttribute('aria-pressed', String(this.selection.has(id)));
+      button.dataset.modeId = target?.id ?? '';
+      button.title = `${controlName(id)} · ${target?.name ?? t('unassigned_mode_pad')}`;
+      button.setAttribute('aria-label', t('select', { p0: button.title }));
+      if (isPad(id)) {
+        this.paintPad(button, { color: target?.color ?? 0, brightness: target?.id === this.editorModeId ? 'bright' : 'dim' });
+        button.querySelector('.pad-assignment')!.textContent = target?.name ?? t('unassigned_mode_pad');
+      }
+    });
+    this.el('mapped-count').textContent = t('assigned_mode_count', { p0: this.profile.modes.filter(mode => mode.selectorButton || mode.selectorPad).length });
+    this.renderEditActions();
+  }
   private renderMap(): void {
+    const modeView = this.inspector === 'mode';
+    this.el('legend-mapped').textContent = t(modeView ? 'assigned_mode_pad' : 'mapped');
+    this.el('legend-unmapped').textContent = t(modeView ? 'unassigned_mode_pad' : 'unmapped');
+    if (modeView) return this.renderModeMap();
+    this.el('hardware').classList.remove('mode-preview');
     const count = new Set([
       this.profile.modeSelector,
       ...Object.entries(this.currentMode().bindings).filter(([, b]) => b && b.type !== 'none').map(([id]) => id === 'SMART_STRIP_TOUCH' ? 'SMART_STRIP' : id),
@@ -1102,6 +1297,7 @@ export class TranslatorUI {
       const press = isPad(id) ? this.currentMode().pressureBindings?.[id] : undefined;
       const touch = id === 'SMART_STRIP' ? this.currentMode().bindings.SMART_STRIP_TOUCH : undefined;
       const mapped = id === this.profile.modeSelector || Boolean(binding && binding.type !== 'none' || press && press.type !== 'off' || touch && touch.type !== 'none');
+      button.classList.remove('is-mode-current'); delete button.dataset.modeId;
       button.classList.toggle('is-mapped', mapped); button.classList.toggle('selected', this.selection.has(id));
       button.setAttribute('aria-pressed', String(this.selection.has(id)));
       button.title = `${controlName(id)} · ${this.controlSummary(id)}`;
@@ -1136,27 +1332,35 @@ export class TranslatorUI {
     const state = this.runtime.snapshot;
     const pressed = new Set(state.pressedButtons), activePads = new Set(state.activePads);
     document.querySelectorAll<HTMLElement>('[data-control]').forEach(button => {
-      if (!button.dataset.control?.startsWith('PAD_')) button.classList.toggle('is-pressed', pressed.has(button.dataset.control!));
+      if (button.dataset.control?.startsWith('PAD_')) return;
+      const mapping = this.el('hardware').contains(button);
+      button.classList.toggle('is-pressed', (!mapping || this.inspector === 'control' && this.editorModeId === state.activeModeId) && pressed.has(button.dataset.control!));
     });
     document.querySelectorAll<HTMLButtonElement>('[data-control^="PAD_"]').forEach(button => {
       const id = button.dataset.control as `PAD_${number}`;
       if (!PAD_IDS.includes(id)) return;
-      const pressed = activePads.has(id);
+      const mapping = this.el('hardware').contains(button);
+      if (mapping && this.inspector === 'mode') return;
+      const mode = mapping ? this.currentMode() : this.profile.modes.find(mode => mode.id === state.activeModeId) ?? this.currentMode();
+      const pressed = (!mapping || this.editorModeId === state.activeModeId) && activePads.has(id);
       button.classList.toggle('is-pressed', pressed);
       if (state.selectingMode) {
         const target = this.profile.modes.find(mode => mode.selectorPad === id);
-        this.paintPad(button, { color: target?.color ?? 0, brightness: target?.id === this.activeModeId ? 'bright' : 'dim' });
+        this.paintPad(button, { color: target?.color ?? 0, brightness: target?.id === state.activeModeId ? 'bright' : 'dim' });
         button.querySelector('.pad-assignment')!.textContent = target?.name ?? '';
         return;
       }
-      const binding = this.currentMode().bindings[id];
+      const binding = mode.bindings[id];
       button.querySelector('.pad-assignment')!.textContent = binding?.type === 'note' ? `CH ${binding.channel}\n${this.noteLabel(binding.note)}` : this.bindingLabel(binding);
-      const light = this.currentMode().pads[Number(id.slice(4)) - 1];
-      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: this.currentMode().padOnBrightness } : { ...light, brightness: this.currentMode().padOffBrightness });
+      const light = mode.pads[Number(id.slice(4)) - 1];
+      this.paintPad(button, pressed ? { color: light.onColor ?? light.color, brightness: mode.padOnBrightness } : { ...light, brightness: mode.padOffBrightness });
     });
   }
   private queueModeLights(): void {
-    this.renderLightPreview(this.runtime.snapshot.lightReport);
+    const state = this.runtime.snapshot;
+    const preview = this.inspector === 'mode' || this.editorModeId !== state.activeModeId && !state.selectingMode;
+    const report = preview ? this.previewDriver.lights(this.currentMode(), { activePads: new Set(), pressedButtons: new Set(), stripRaw: 0 }, this.profile, this.inspector === 'mode') : state.lightReport;
+    this.renderLightPreview(report);
   }
   private renderLightPreview(report: OutputReport): void {
     const stripLight = this.currentMode().stripLight;

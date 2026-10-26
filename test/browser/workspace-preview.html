@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiDiY desktop and mobile layout regression</title>
+<style>body{margin:0;background:#151515;color:#ccc;font:13px system-ui}h2{margin:12px}iframe{border:1px solid #444;display:block}#desktop{width:1440px;height:1000px;zoom:.375}#mobile{width:390px;height:844px}</style>
+<h2>Desktop · 1440 × 1000</h2><iframe id="desktop" src="workspace-layout.html"></iframe>
+<h2>Mobile · 390 × 844</h2><iframe id="mobile" src="workspace-layout.html"></iframe>
+
+<pre id="preview-results" style="white-space:pre-wrap"></pre><script>addEventListener('message',event=>{if(event.origin===location.origin && event.data.results) document.getElementById('preview-results').textContent+=event.data.width+'px '+event.data.title+'\n'+event.data.results+'\n';});</script>
+<script>if(new URLSearchParams(location.search).has('live')) {document.querySelectorAll('iframe').forEach(frame=>frame.src='/');document.getElementById('preview-results').hidden=true;}</script><script>
+const fitDesktop=()=>document.getElementById('desktop').style.zoom=String(Math.min(1,(innerWidth-32)/1440));
+fitDesktop();addEventListener('resize',fitDesktop);
+if(new URLSearchParams(location.search).get('page')==='testing') document.querySelectorAll('iframe').forEach(frame=>frame.src=new URLSearchParams(location.search).has('live')?'/?#testing':frame.src);
+</script>

@@ -70,6 +70,8 @@ export class MappingEngine {
     if (!this.profile.modes.some(m => m.id === id)) throw new Error('Unknown mode');
     if (id === this.activeModeId) return { messages: [], modeChanged: false };
     const messages = this.flush();
+    // A button held across a mode change must release before its new binding can run.
+    for (const control of this.held) if (!control.startsWith('PAD_')) this.selectorButtons.add(control);
     this.activeModeId = id;
     return { messages, modeChanged: true };
   }
@@ -80,6 +82,12 @@ export class MappingEngine {
       if (event.pressed) { this.held.add(id); this.selectorButtons.add(id); }
       else { this.held.delete(id); this.selectorButtons.delete(id); }
       return { ...result, handled: true };
+    }
+    if (event.kind === 'button' && this.selectingMode && event.pressed) {
+      if (this.held.has(id)) return { ...result, handled: true };
+      this.held.add(id); this.selectorButtons.add(id);
+      const target = this.profile.modes.find(mode => mode.selectorButton === id);
+      return { ...(target ? this.switchMode(target.id) : result), handled: true };
     }
     if (event.kind === 'pad' && (this.selectingMode || this.selectorPads.has(id))) {
       const down = (event.event === 'press-on' || event.event === 'note-on') && event.raw > 0;

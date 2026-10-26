@@ -1,4 +1,30 @@
 export const zhTW = {
+  "playing_mode": "演奏：{p0}",
+  "edit_mode_only": "選擇要編輯的 Mode；不切換實際演奏模式。",
+  "mode_selection_status": "目前選取：{p0} · {p1}",
+  "assigned_mode_count": "已指派 {p0} 個模式",
+
+  "control_binding_tabs": "控制項映射設定",
+  "strip_position_tab": "Position · 位置",
+  "strip_touch_tab": "Touch · 觸碰",
+
+  "pad_hit_tab": "Hit · 敲擊",
+  "pad_press_tab": "Press · 持續施壓",
+
+  "button_gate_lights": "一般按鍵 · Gate / Trigger / Inc",
+  "button_toggle_lights": "一般按鍵 · Toggle",
+  "mode_trigger": "目前觸發控制項",
+  "clear_mode_trigger": "清除模式觸發控制項",
+
+  "add_profile": "新增空白 Profile",
+  "add_mode": "新增空白 Mode",
+  "new_profile": "新設定檔",
+  "new_mode": "新模式",
+  "mode_color": "模式燈色",
+  "mode_settings": "Mode 設定",
+  "control_settings": "控制項設定",
+  "inspector_settings": "設定面板",
+
   "device_connection": "裝置連線",
   "strip_hold_light": "放開後保留燈光",
   "note_pitch": "音名",
@@ -118,7 +144,7 @@ export const zhTW = {
   "unassigned_mode_pad": "未指定",
   "assigned_mode_pad": "已使用",
   "replace_selector_binding": "此按鍵在部分模式已有映射。改為模式選擇鍵會移除這些映射，是否繼續？",
-  "set_as_startup_mode": "預設 mode",
+  "set_as_startup_mode": "啟動模式",
   "mapped": "已映射",
   "unmapped": "未映射",
   "select_controls_on_the_reference_image_pads_show_channel_note_apply_cont": "點選參照圖上的控制項編輯。Pad 下方顯示 Channel／Note；控制項燈光套用後儲存，裝置燈光中的共用亮度切換後立即儲存。",

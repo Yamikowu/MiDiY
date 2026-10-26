@@ -109,3 +109,71 @@ test('an unassigned mode remains reachable through an ordinary switch-mode bindi
   assert.equal(engine.activeModeId, target.id);
   assert.equal(engine.selectingMode, false);
 });
+
+test('mode button triggers validate uniqueness, reserved keys, selector conflicts and exclusive Pad assignment', () => {
+  const p = createDefaultProfile(); p.modes[1].selectorPad = null; p.modes[1].selectorButton = 'PLAY';
+  assert.deepEqual(parseProfile(JSON.parse(JSON.stringify(p))), p);
+  for (const change of [
+    (v: any) => v.modes[2].selectorButton = 'PLAY',
+    (v: any) => v.modes[1].selectorPad = 'PAD_1',
+    (v: any) => v.modes[1].selectorButton = 'GROUP',
+    (v: any) => v.modes[1].selectorButton = 'SHIFT',
+    (v: any) => v.modes[1].selectorButton = 'FAVORITES',
+    (v: any) => v.modes[1].selectorButton = 'BROWSER',
+    (v: any) => v.modes[1].selectorButton = 'ENCODER_PUSH',
+    (v: any) => v.modes[1].selectorButton = 'ENCODER_TOUCH',
+    (v: any) => v.modes[1].selectorButton = 'SMART_STRIP'
+  ]) {const invalid = structuredClone(p); change(invalid); assert.throws(() => parseProfile(invalid));}
+});
+
+test('selector plus ordinary button switches once and consumes releases while preserving ordinary MIDI outside selection', () => {
+  const p = createDefaultProfile(); p.modes[1].selectorPad = null; p.modes[1].selectorButton = 'PLAY';
+  p.modes[0].bindings.PLAY = {type:'note',channel:1,note:60,velocity:127};
+  p.modes[1].bindings.PLAY = {type:'cc',channel:1,controller:74,style:'trigger',value:99,actionOn:'up'};
+  const e = new MappingEngine(p);
+  assert.deepEqual(e.process(button('PLAY')).messages,[[0x90,60,127]]);
+  assert.deepEqual(e.process(button('PLAY',false)).messages,[[0x80,60,0]]);
+  e.process(button());
+  const selected=e.process(button('PLAY'));
+  assert.equal(selected.modeChanged,true); assert.equal(selected.handled,true); assert.deepEqual(selected.messages,[]);
+  assert.equal(e.activeModeId,p.modes[1].id);
+  assert.equal(e.process(button('PLAY')).modeChanged,false);
+  e.process(button('GROUP',false));
+  assert.deepEqual(e.process(button('PLAY',false)).messages,[]);
+  assert.deepEqual(e.process(button('PLAY')).messages,[]);
+  assert.deepEqual(e.process(button('PLAY',false)).messages,[[0xb0,74,99]]);
+});
+
+test('held buttons release before receiving a new mode binding; unassigned selector buttons stay silent', () => {
+  const p=createDefaultProfile();p.modes[1].selectorPad=null;p.modes[1].selectorButton='PLAY';
+  p.modes[0].bindings.REC={type:'note',channel:1,note:61,velocity:127};
+  p.modes[1].bindings.REC={type:'cc',channel:1,controller:75,style:'trigger',value:100,actionOn:'up'};
+  const e=new MappingEngine(p); e.process(button('REC'));e.process(button());
+  assert.deepEqual(e.process(button('REC')).messages,[]);assert.equal(e.activeModeId,p.modes[0].id);
+  assert.deepEqual(e.process(button('REC',false)).messages,[[0x80,61,0]]);
+  assert.deepEqual(e.process(button('STOP')).messages,[]);e.process(button('STOP',false));
+  e.process(button('GROUP',false)); e.process(button('REC')); e.process(button());
+  assert.deepEqual(e.process(button('PLAY')).messages,[[0x80,61,0]]);
+  e.process(button('GROUP',false));
+  assert.deepEqual(e.process(button('REC',false)).messages,[]);
+  assert.deepEqual(e.process(button('PLAY',false)).messages,[]);
+  assert.deepEqual(e.process(button('REC')).messages,[]);
+  assert.deepEqual(e.process(button('REC',false)).messages,[[0xb0,75,100]]);
+});
+
+test('button mode palette matches Pad selection brightness, restores normal lights and remains LED opt-in', async () => {
+  const p=createDefaultProfile();p.modes[1].selectorPad=null;p.modes[1].selectorButton='PLAY';
+  p.modes[0].bindings.REC={type:'note',channel:1,note:62,velocity:127};
+  const {runtime,input,midi}=fixture(p);await runtime.connect();await runtime.selectOutput('a');
+  const normal=[...runtime.snapshot.lightReport.data];input.report(1,report('GROUP'));
+  const index=BUTTON_IDS.indexOf('PLAY');
+  assert.equal(runtime.snapshot.lightReport.data[index],0x7c);
+  assert.equal(runtime.snapshot.lightReport.data[BUTTON_IDS.indexOf('REC')],0);
+  assert.equal(input.sent.length,0);
+  runtime.setLedEnabled(true);await tick();assert.equal(input.sent.at(-1)!.data[index],0x7c);
+  const held=report('GROUP');const key=BUTTON_IDS.indexOf('PLAY');held[key>>3]|=1<<(key%8);input.report(1,held);await tick();
+  assert.equal(runtime.activeModeId,p.modes[1].id);assert.equal(runtime.snapshot.lightReport.data[index],0x7f);assert.equal(midi.sent.length,0);
+  input.report(1,report('PLAY'));input.report(1,report('PLAY',false));await tick();
+  assert.equal(runtime.snapshot.selectingMode,false);assert.deepEqual([...runtime.snapshot.lightReport.data],normal);assert.equal(midi.sent.length,0);
+  input.report(1,report('GROUP'));runtime.panic();assert.equal(runtime.snapshot.selectingMode,false);
+});

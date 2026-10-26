@@ -11,23 +11,20 @@
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./hardware-map.css">
   <link rel="stylesheet" href="./translator.css">
+  <link rel="stylesheet" href="./workspace.css">
 </head>
 
 <body>
-  <div class="app-shell">
-    <header class="topbar">
+  <header class="topbar">
+    <div class="chrome-inner">
       <div class="header-identity">
         <a class="brand" href="#mapping" aria-label="MiDiY Mapping"><span
             class="brand-mark">MiDiY<span>↗</span></span></a>
         <span class="brand-divider" aria-hidden="true"></span>
-        <div class="brand-device">MASCHINE MIKRO<small>MK3 CONTROL WORKSPACE</small></div>
-        <div class="language-switch" role="group" aria-label="語言" data-i18n-aria-label="language">
-          <button type="button" data-locale="zh-TW" lang="zh-Hant" aria-pressed="true">繁中</button>
-          <button type="button" data-locale="en" lang="en" aria-pressed="false">EN</button>
-        </div>
+        <div class="brand-device">MASCHINE MIKRO MK3<small>MK3 CONTROL WORKSPACE</small></div>
+
       </div>
 
-    </header>
     <nav class="page-nav" role="tablist" aria-label="工作區" data-i18n-aria-label="workspace">
       <a id="tab-testing" href="#testing" role="tab" data-page="testing" aria-controls="page-testing"
         aria-selected="false" tabindex="-1"><span>01</span> Testing <small><span
@@ -36,38 +33,19 @@
         aria-selected="true"><span>02</span> Mapping <small><span data-i18n="midi_lights">MIDI 與燈光</span></small></a>
       <span class="nav-device">MIKRO MK3 <span class="muted">/</span> WEBHID + MIDI</span>
     </nav>
+        <div class="language-switch" role="group" aria-label="語言" data-i18n-aria-label="language">
+          <button type="button" data-locale="zh-TW" lang="zh-Hant" aria-pressed="true">繁中</button>
+          <button type="button" data-locale="en" lang="en" aria-pressed="false">EN</button>
+        </div>
+    </div>
+  </header>
+  <div class="app-shell">
     <main>
       <section id="page-mapping" role="tabpanel" aria-labelledby="tab-mapping" tabindex="0">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">CONTROL MAPPING</p>
-            <h1><span data-i18n="make_every_control_your_own">每個控制，都由你定義。</span></h1>
-            <p><span
-                data-i18n="select_a_control_to_configure_midi_and_pad_lights_for_the_current_mode_a">點選參照圖上的按鍵，設定目前模式的
-                MIDI 與 Pad 燈光；套用後自動儲存設定檔。</span></p>
-          </div>
-          <div class="page-heading-actions"><span class="page-index">02 / MAPPING</span>
-            <div class="midi-heading-controls"><button id="midi-enable" class="outline"><span data-i18n="enable_midi">授權
-                  MIDI</span></button><label class="output-picker"><span data-i18n="midi_output">MIDI 輸出</span><select
-                  id="midi-output" disabled>
-                  <option value="" data-i18n="not_authorized">尚未授權</option>
-                </select></label><button id="midi-panic" class="text-button" title="釋放目前所有音符與按住的 CC"
-                data-i18n-title="release_all_active_notes_and_held_cc_values">Panic</button></div>
-          </div>
-        </div>
         <div id="midi-panel" class="translator-panel" aria-label="MIDI 映射工作區"
           data-i18n-aria-label="midi_mapping_workspace"></div>
       </section>
       <section id="page-testing" role="tabpanel" aria-labelledby="tab-testing" tabindex="0" hidden>
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">DEVICE TESTING</p>
-            <h1><span data-i18n="see_every_interaction">看見每一次操作。</span></h1>
-            <p><span
-                data-i18n="select_a_control_operate_the_hardware_and_capture_its_raw_input_for_anal">選取控制項、操作實體裝置，記錄與分析它的原始輸入。</span>
-            </p>
-          </div><span class="page-index">01 / TESTING</span>
-        </div>
         <section class="metrics" aria-label="工作階段統計" data-i18n-aria-label="session_statistics">
           <div><small>DEVICE</small><strong id="metric-device"><span
                 data-i18n="waiting_for_connection">等待連線</span></strong></div>
@@ -75,24 +53,21 @@
           <div><small>CAPTURES</small><strong id="metric-captures">0</strong></div>
           <div><small>COVERAGE</small><strong id="metric-coverage">0 / 58</strong></div>
         </section>
-        <div class="workspace">
+        <div class="workspace testing-workspace">
           <section class="panel device-panel">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">HARDWARE</p>
-                <h2><span data-i18n="controller_reference">控制器參照圖</span></h2>
-              </div><span class="section-note"><span data-i18n="select_capture_analyze">選取 → 擷取 → 分析</span></span>
+            <div class="section-heading canvas-heading">
+            <div class="map-footer testing-legend"><span><i class="dot selected-dot"></i><span
+                  data-i18n="selected">目前選取</span></span><span><i class="dot captured-dot"></i><span
+                  data-i18n="captured">已擷取</span></span><span><i class="dot idle-dot"></i><span
+                  data-i18n="not_tested">待測</span></span></div>
             </div>
             <div class="hardware-scroll">
               <div id="hardware" class="hardware" aria-label="Testing 控制器參照圖"
                 data-i18n-aria-label="testing_controller_reference"></div>
             </div>
-            <div class="map-footer"><span><i class="dot selected-dot"></i><span
-                  data-i18n="selected">目前選取</span></span><span><i class="dot captured-dot"></i><span
-                  data-i18n="captured">已擷取</span></span><span><i class="dot idle-dot"></i><span
-                  data-i18n="not_tested">待測</span></span></div>
+
           </section>
-          <section class="panel capture-panel">
+          <section class="panel capture-panel testing-inspector">
             <div class="section-heading">
               <div>
                 <p class="eyebrow">INSPECTOR</p>
@@ -181,6 +156,14 @@
     </main>
   </div>
   <aside class="connection-dock" aria-label="裝置連線" data-i18n-aria-label="device_connection">
+    <div class="chrome-inner status-inner">
+    <div class="midi-heading-controls"><button id="midi-enable" class="outline"><span data-i18n="enable_midi">授權
+                  MIDI</span></button><label class="output-picker"><span data-i18n="midi_output">MIDI 輸出</span><select
+                  id="midi-output" disabled>
+                  <option value="" data-i18n="not_authorized">尚未授權</option>
+                </select></label><button id="midi-panic" class="text-button" title="釋放目前所有音符與按住的 CC"
+                data-i18n-title="release_all_active_notes_and_held_cc_values">Panic</button></div>
+    <div class="hardware-connection-controls">
     <div class="connection-status-row">
       <span id="device-status" class="status-pill"><span data-i18n="disconnected">● 尚未連線</span></span>
       <label class="led-toggle" title="接管 LED：開啟後由 MiDiY 控制裝置燈光，關閉時釋放控制。">
@@ -192,6 +175,8 @@
     </div>
     <button id="connect" class="primary"><span data-i18n="connect_device">連接裝置</span></button>
     <button id="disconnect" class="ghost" disabled><span data-i18n="disconnect">中斷</span></button>
+    </div>
+    </div>
   </aside>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./src/app.js"></script>

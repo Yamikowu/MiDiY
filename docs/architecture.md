@@ -21,7 +21,7 @@ app.js（組裝與瀏覽器生命週期）
 - `src/runtime/`：連線與轉譯生命週期、已套用設定、模式、清音、LED 接管／佇列。透過注入的 I/O 運作，不讀 DOM、navigator 或儲存。
 - `src/adapters/input/`、`src/adapters/output/`：分別處理控制器資料與 MIDI 接收端。WebHID descriptor 驗證與原生瀏覽器物件只留在 Adapter。
 - `src/devices/mikro-mk3/`：裝置識別、控制項與擷取指引、Driver、網頁硬體圖。硬體圖依賴 DOM；Driver 不引用硬體圖。
-- `src/mapping/`：編輯草稿、預覽、匯入匯出與本機設定清單。只有套用才更新執行設定；力度曲線與共用燈光依既有操作立即儲存。
+- `src/mapping/`：編輯草稿、預覽、匯入匯出與本機設定清單。UI 的 editorModeId 與 Runtime 演奏模式分離；瀏覽 Mode 只更新 UI，模式指派畫面由獨立 MikroDriver 純編碼後繪到參照圖，不送裝置。只有套用才更新執行映射；Mode 綁定、力度曲線與共用燈光依既有操作立即儲存。
 - `src/research/`：CaptureSession 管理原始資料與擷取狀態，Testing UI 訂閱 Runtime；不需要 Mapping UI。
 - `src/i18n/`：繁中／英文顯示與語言偏好；只更新標記文字和 UI 摘要，不重建表單或 Runtime。
 - `src/shared/`：頁籤與對話框等網頁共用工具。
@@ -33,7 +33,7 @@ app.js（組裝與瀏覽器生命週期）
 
 Runtime 提供 connect／disconnect、enableMidi／selectOutput、applyProfile／switchMode、setVelocityCurve／updateFeedback、setLedEnabled／panic。一般套用保留引擎的 held-control 抑制規則；載入另一份 Profile 時以 restart 重建引擎。力度與共用回饋更新不釋放正在發聲的音符。
 
-`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MappingEngine 管理按住模式選擇鍵與 Pad 切換的抑制狀態；Runtime snapshot 的 selectingMode 供 UI 顯示，Driver 依 Profile 的模式 Pad／顏色產生選擇畫面。
+`subscribe` 回傳取消訂閱函式；事件包括 state、raw、decoded、mode、midi、diagnostic、error、disconnected。每個訂閱者取得獨立副本，訂閱者拋錯不打斷轉譯；`snapshot` 同樣是獨立副本。MappingEngine 管理按住模式選擇鍵與 Pad／一般按鍵切換的抑制狀態，選模式及跨模式按住的按鍵須放開才恢復新映射；Runtime snapshot 的 selectingMode 供 UI 顯示，Driver 依 Profile 的模式觸發控制項編碼 Pad 色盤及單色按鍵燈號。
 
 MIDI 寫出事件表示送出呼叫完成，不能證明 DAW 已收到。錯誤事件與 LED 狀態另外提供語言無關的 code／params／detail，由網頁翻譯；Runtime 不引用語系字典。
 

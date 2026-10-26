@@ -1,5 +1,31 @@
 import type { MessageKey } from './zh-TW';
 export const en = {
+  "playing_mode": "Playing: {p0}",
+  "edit_mode_only": "Select a mode to edit without changing the playing mode.",
+  "mode_selection_status": "Selected: {p0} · {p1}",
+  "assigned_mode_count": "{p0} assigned modes",
+
+  "control_binding_tabs": "Control binding settings",
+  "strip_position_tab": "Position",
+  "strip_touch_tab": "Touch",
+
+  "pad_hit_tab": "Hit · Strike",
+  "pad_press_tab": "Press · Pressure",
+
+  "button_gate_lights": "Buttons · Gate / Trigger / Inc",
+  "button_toggle_lights": "Buttons · Toggle",
+  "mode_trigger": "Current trigger control",
+  "clear_mode_trigger": "Clear mode trigger",
+
+  "add_profile": "Add blank profile",
+  "add_mode": "Add blank mode",
+  "new_profile": "New Profile",
+  "new_mode": "New Mode",
+  "mode_color": "Mode color",
+  "mode_settings": "Mode Settings",
+  "control_settings": "Control Settings",
+  "inspector_settings": "Inspector settings",
+
   "device_connection": "Device connection",
   "strip_hold_light": "Keep light on after release",
   "note_pitch": "Pitch",
@@ -119,7 +145,7 @@ export const en = {
   "unassigned_mode_pad": "Unassigned",
   "assigned_mode_pad": "Assigned",
   "replace_selector_binding": "This button has mappings in some modes. Making it the mode selector will remove those mappings. Continue?",
-  "set_as_startup_mode": "Default mode",
+  "set_as_startup_mode": "Startup mode",
   "mapped": "Mapped",
   "unmapped": "Unmapped",
   "select_controls_on_the_reference_image_pads_show_channel_note_apply_cont": "Select controls on the reference image. Pads show Channel / Note. Apply control lights to save; shared brightness settings save immediately.",
